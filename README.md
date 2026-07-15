@@ -91,7 +91,9 @@ admin score deletion.
 2. **VPS one-time (CentOS Stream 8/9, Rocky/Alma):** run
    `infra/deploy/setup-vps.sh` as root (firewalld, fail2ban, Docker), copy
    `infra/docker-compose.prod.yml`, `infra/Caddyfile` and a filled-in `.env`
-   (from `infra/.env.prod.example`) to `/opt/gamehub`. SELinux stays enforcing;
+   (from `infra/.env.prod.example`) to `~/gamehub/.env`. The deploy workflow
+   reads that absolute path and fails before restart if it is unavailable or a
+   required value is blank. SELinux stays enforcing;
    the Caddyfile bind mount already carries the `:z` relabel suffix.
 3. **GitHub:** set repo secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` and repo
    variable `DOMAIN`. Every push to `main` builds images, syncs the production

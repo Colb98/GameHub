@@ -1,6 +1,6 @@
-# Production stack for a single VPS. Copy to /opt/gamehub together with
+# Production stack for a single VPS. Copy to ~/gamehub together with
 # Caddyfile and a .env file (see .env.prod.example), then:
-#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose --env-file "$HOME/gamehub/.env" -f docker-compose.prod.yml up -d
 services:
   caddy:
     image: caddy:2-alpine
@@ -9,7 +9,7 @@ services:
       - '80:80'
       - '443:443'
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${DOMAIN:?DOMAIN is required in ~/gamehub/.env}
     volumes:
       # ':ro,z' — the z suffix lets Docker relabel this host bind mount for
       # SELinux (enforcing on CentOS); it's a harmless no-op on other distros.
@@ -23,15 +23,15 @@ services:
     restart: unless-stopped
     environment:
       PORT: 4000
-      DATABASE_URL: postgresql://gamehub:${POSTGRES_PASSWORD}@postgres:5432/gamehub
-      WEB_ORIGIN: https://${DOMAIN}
+      DATABASE_URL: postgresql://gamehub:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in ~/gamehub/.env}@postgres:5432/gamehub
+      WEB_ORIGIN: https://${DOMAIN:?DOMAIN is required in ~/gamehub/.env}
       GAMES_STORAGE_DIR: /storage/games
       COOKIE_SECURE: 'true'
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_GUEST_SECRET: ${JWT_GUEST_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required in ~/gamehub/.env}
+      JWT_GUEST_SECRET: ${JWT_GUEST_SECRET:?JWT_GUEST_SECRET is required in ~/gamehub/.env}
       # OAuth callbacks use the same-origin API proxy so the resulting auth
       # cookies belong to the portal host as well.
-      API_PUBLIC_URL: https://${DOMAIN}
+      API_PUBLIC_URL: https://${DOMAIN:?DOMAIN is required in ~/gamehub/.env}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
@@ -56,7 +56,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: gamehub
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in ~/gamehub/.env}
       POSTGRES_DB: gamehub
     volumes:
       - pgdata:/var/lib/postgresql/data

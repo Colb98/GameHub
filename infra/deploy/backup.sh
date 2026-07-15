@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Nightly Postgres dump + optional offsite sync with rclone.
-# Cron example: 0 3 * * * /opt/gamehub/backup.sh >> /var/log/gamehub-backup.log 2>&1
+# Run this from the deployment user's crontab.
+# Cron example: 0 3 * * * $HOME/gamehub/backup.sh >> $HOME/gamehub/backup.log 2>&1
 set -euo pipefail
 
-BACKUP_DIR=/opt/gamehub/backups
+GAMEHUB_DIR="${GAMEHUB_DIR:-$HOME/gamehub}"
+BACKUP_DIR="$GAMEHUB_DIR/backups"
 KEEP_DAYS=14
 STAMP=$(date +%Y%m%d-%H%M%S)
 
 mkdir -p "$BACKUP_DIR"
-docker compose -f /opt/gamehub/docker-compose.prod.yml exec -T postgres \
+docker compose --env-file "$GAMEHUB_DIR/.env" -f "$GAMEHUB_DIR/docker-compose.prod.yml" exec -T postgres \
   pg_dump -U gamehub gamehub | gzip > "$BACKUP_DIR/gamehub-$STAMP.sql.gz"
 
 find "$BACKUP_DIR" -name 'gamehub-*.sql.gz' -mtime +$KEEP_DAYS -delete

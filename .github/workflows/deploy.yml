@@ -62,7 +62,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: infra/docker-compose.prod.yml,infra/Caddyfile
-          target: /opt/gamehub
+          target: ~/gamehub
           strip_components: 1
           overwrite: true
       - uses: appleboy/ssh-action@v1
@@ -72,9 +72,12 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -eu
-            cd /opt/gamehub
-            docker compose -f docker-compose.prod.yml config --quiet
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
-            docker compose -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+            GAMEHUB_DIR="$HOME/gamehub"
+            ENV_FILE="$GAMEHUB_DIR/.env"
+            cd "$GAMEHUB_DIR"
+            test -r "$ENV_FILE" || { echo "$ENV_FILE is missing or unreadable" >&2; exit 1; }
+            docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml config --quiet
+            docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml pull
+            docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml up -d
+            docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
             docker system prune -f

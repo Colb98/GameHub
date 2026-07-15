@@ -54,17 +54,23 @@ $PKG install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 systemctl enable --now docker
 
 echo "== App directory =="
-mkdir -p /opt/gamehub
-# Let the (non-root) SSH deploy user run docker without sudo, if one exists
+DEPLOY_USER=root
+DEPLOY_HOME=$HOME
+# Let the (non-root) SSH deploy user run docker without sudo, if one exists,
+# and keep the application under that user's home directory.
 if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
-  usermod -aG docker "$SUDO_USER"
-  echo "  Added ${SUDO_USER} to the 'docker' group (re-login for it to take effect)"
+  DEPLOY_USER=$SUDO_USER
+  DEPLOY_HOME=$(getent passwd "$DEPLOY_USER" | cut -d: -f6)
+  usermod -aG docker "$DEPLOY_USER"
+  echo "  Added ${DEPLOY_USER} to the 'docker' group (re-login for it to take effect)"
 fi
+DEPLOY_GROUP=$(id -gn "$DEPLOY_USER")
+install -d -m 0750 -o "$DEPLOY_USER" -g "$DEPLOY_GROUP" "$DEPLOY_HOME/gamehub"
 
 echo
 echo "Copy infra/docker-compose.prod.yml, infra/Caddyfile and a filled-in .env"
-echo "to /opt/gamehub, then run:"
-echo "  cd /opt/gamehub && docker compose -f docker-compose.prod.yml up -d"
+echo "to ${DEPLOY_HOME}/gamehub, then run as ${DEPLOY_USER}:"
+echo "  cd ${DEPLOY_HOME}/gamehub && docker compose --env-file .env -f docker-compose.prod.yml up -d"
 echo
 echo "Reminders:"
 echo "  - SELinux is enforcing on CentOS: host bind mounts in the compose file"
