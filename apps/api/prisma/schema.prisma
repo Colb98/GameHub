@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLAYER
+  DEVELOPER
+  MODERATOR
+  ADMIN
+}
+
+enum GameStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  PUBLISHED
+  REJECTED
+  DELISTED
+}
+
+enum Orientation {
+  LANDSCAPE
+  PORTRAIT
+  BOTH
+}
+
+enum ScoreOrder {
+  DESC
+  ASC
+}
+
+enum Provider {
+  GOOGLE
+  FACEBOOK
+}
+
+enum CommentStatus {
+  VISIBLE
+  HIDDEN
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String?        @unique
+  passwordHash  String?
+  displayName   String
+  avatarUrl     String?
+  role          Role           @default(PLAYER)
+  locale        String         @default("en")
+  createdAt     DateTime       @default(now())
+  identities    Identity[]
+  refreshTokens RefreshToken[]
+  games         Game[]         @relation("DeveloperGames")
+  sessions      PlaySession[]
+  scores        Score[]
+  comments      Comment[]
+  ratings       Rating[]
+  favorites     Favorite[]
+}
+
+model Identity {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    Provider
+  providerUid String
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, providerUid])
+}
+
+model Guest {
+  id          String        @id @default(uuid())
+  displayName String
+  createdAt   DateTime      @default(now())
+  sessions    PlaySession[]
+  scores      Score[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Game {
+  id            String            @id @default(cuid())
+  slug          String            @unique
+  developerId   String
+  developer     User              @relation("DeveloperGames", fields: [developerId], references: [id])
+  status        GameStatus        @default(DRAFT)
+  category      String
+  orientation   Orientation       @default(BOTH)
+  scoreOrder    ScoreOrder        @default(DESC)
+  /// Server-side anti-cheat: scores above this are rejected (null = no ceiling)
+  maxScore      Int?
+  /// Server-side anti-cheat: matches shorter than this are rejected
+  minDurationMs Int               @default(2000)
+  releaseDate   DateTime?
+  playCount     Int               @default(0)
+  ratingAvg     Float             @default(0)
+  ratingCount   Int               @default(0)
+  featuredRank  Int?
+  rejectReason  String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  translations  GameTranslation[]
+  versions      GameVersion[]
+  sessions      PlaySession[]
+  scores        Score[]
+  comments      Comment[]
+  ratings       Rating[]
+  favorites     Favorite[]
+}
+
+model GameTranslation {
+  id           String @id @default(cuid())
+  gameId       String
+  game         Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  locale       String
+  name         String
+  shortIntro   String
+  controlsHtml String
+
+  @@unique([gameId, locale])
+}
+
+model GameVersion {
+  id         String   @id @default(cuid())
+  gameId     String
+  game       Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  semver     String
+  bundlePath String
+  entryHtml  String   @default("index.html")
+  isActive   Boolean  @default(false)
+  uploadedAt DateTime @default(now())
+
+  @@unique([gameId, semver])
+}
+
+model PlaySession {
+  id        String    @id @default(cuid())
+  gameId    String
+  game      Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestId   String?
+  guest     Guest?    @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  tokenHash String    @unique
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  score     Score?
+
+  @@index([gameId, startedAt])
+}
+
+model Score {
+  id           String      @id @default(cuid())
+  gameId       String
+  game         Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestId      String?
+  guest        Guest?      @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  /// Display name at the time of the match (guests only have this)
+  nameSnapshot String
+  score        Int
+  durationMs   Int
+  sessionId    String      @unique
+  session      PlaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Reserved for future multiplayer matches
+  matchId      String?
+  createdAt    DateTime    @default(now())
+
+  @@index([gameId, score(sort: Desc), createdAt])
+  @@index([gameId, createdAt])
+}
+
+model Comment {
+  id        String        @id @default(cuid())
+  gameId    String
+  game      Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  status    CommentStatus @default(VISIBLE)
+  createdAt DateTime      @default(now())
+
+  @@index([gameId, createdAt])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stars     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([gameId, userId])
+}
+
+model Favorite {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, gameId])
+}

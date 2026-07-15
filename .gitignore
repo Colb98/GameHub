@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# local env
+.env
+.env.local
+.env*.local
+
+# local data
+storage/
+.pgdata/
+
+# misc
+.DS_Store
+Thumbs.db

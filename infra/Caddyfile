@@ -1,0 +1,20 @@
+# Automatic HTTPS via Let's Encrypt. Set DOMAIN in the compose environment.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy web:3000
+}
+
+api.{$DOMAIN} {
+	encode gzip
+	reverse_proxy api:4000
+}
+
+# Game bundles are served as pure static files from a separate origin,
+# so third-party game code can never read portal cookies or tokens.
+games.{$DOMAIN} {
+	root * /srv/games
+	file_server
+	encode gzip
+	header Cache-Control "public, max-age=3600"
+	header X-Content-Type-Options "nosniff"
+}

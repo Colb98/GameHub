@@ -1,0 +1,28 @@
+{
+  "name": "gamehub",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:dev": "node scripts/dev-db.mjs",
+    "db:migrate": "pnpm --filter @gamehub/api exec prisma migrate dev",
+    "seed": "pnpm --filter @gamehub/api seed"
+  },
+  "devDependencies": {
+    "embedded-postgres": "18.4.0-beta.17",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@fastify/cookie>cookie": "^1.0.2",
+      "sanitize-html>htmlparser2": "^9.1.0"
+    }
+  }
+}

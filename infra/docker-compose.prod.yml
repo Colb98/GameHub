@@ -1,0 +1,65 @@
+# Production stack for a single VPS. Copy to /opt/gamehub together with
+# Caddyfile and a .env file (see .env.prod.example), then:
+#   docker compose -f docker-compose.prod.yml up -d
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - games_storage:/srv/games:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/OWNER/gamehub-api:latest}
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://gamehub:${POSTGRES_PASSWORD}@postgres:5432/gamehub
+      WEB_ORIGIN: https://${DOMAIN}
+      GAMES_STORAGE_DIR: /storage/games
+      COOKIE_SECURE: 'true'
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_GUEST_SECRET: ${JWT_GUEST_SECRET}
+      API_PUBLIC_URL: https://api.${DOMAIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+    volumes:
+      - games_storage:/storage/games
+    depends_on:
+      - postgres
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/OWNER/gamehub-web:latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gamehub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: gamehub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Reserved for rate-limit storage / leaderboards / multiplayer pub-sub
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
+  games_storage:
