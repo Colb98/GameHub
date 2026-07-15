@@ -86,9 +86,11 @@ admin score deletion.
 
 1. **DNS/Cloudflare:** point `DOMAIN`, `api.DOMAIN`, `games.DOMAIN` at the VPS,
    proxied through Cloudflare (DDoS/WAF + hides the origin IP).
-2. **VPS one-time:** run `infra/deploy/setup-vps.sh` as root (firewall,
-   fail2ban, Docker), copy `infra/docker-compose.prod.yml`, `infra/Caddyfile`
-   and a filled-in `.env` (from `infra/.env.prod.example`) to `/opt/gamehub`.
+2. **VPS one-time (CentOS Stream 8/9, Rocky/Alma):** run
+   `infra/deploy/setup-vps.sh` as root (firewalld, fail2ban, Docker), copy
+   `infra/docker-compose.prod.yml`, `infra/Caddyfile` and a filled-in `.env`
+   (from `infra/.env.prod.example`) to `/opt/gamehub`. SELinux stays enforcing;
+   the Caddyfile bind mount already carries the `:z` relabel suffix.
 3. **GitHub:** set repo secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` and repo
    variable `DOMAIN`. Every push to `main` builds images and redeploys
    (`.github/workflows/deploy.yml`).
@@ -97,7 +99,7 @@ admin score deletion.
 
 ## Security notes
 
-- Cloudflare proxy + ufw + fail2ban + SSH keys at the edge/host level.
+- Cloudflare proxy + firewalld + fail2ban + SSH keys at the edge/host level.
 - API: per-route rate limits (stricter on auth/score), Helmet, strict CORS,
   argon2 password hashing, rotating refresh tokens, OAuth `state` checks.
 - DB: Prisma parameterized queries only; Postgres never exposed publicly.

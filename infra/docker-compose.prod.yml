@@ -11,7 +11,9 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # ':ro,z' — the z suffix lets Docker relabel this host bind mount for
+      # SELinux (enforcing on CentOS); it's a harmless no-op on other distros.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
       - games_storage:/srv/games:ro
       - caddy_data:/data
       - caddy_config:/config
