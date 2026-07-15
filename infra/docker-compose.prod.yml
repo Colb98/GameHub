@@ -42,6 +42,11 @@ services:
   web:
     image: ${WEB_IMAGE:-ghcr.io/OWNER/gamehub-web:latest}
     restart: unless-stopped
+    environment:
+      # Server-side rendering talks to the API over the internal Docker
+      # network, so the homepage no longer depends on the public api.<domain>
+      # cert being ready. (The browser still uses NEXT_PUBLIC_API_URL.)
+      API_URL: http://api:4000/api/v1
     depends_on:
       - api
 
