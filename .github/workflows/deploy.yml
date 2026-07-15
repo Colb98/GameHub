@@ -16,6 +16,10 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      # GHCR requires lowercase repository names; the owner "Colb98" is not,
+      # and Actions expressions have no lowercase function — do it in bash
+      - name: Compute lowercase image owner
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -26,13 +30,13 @@ jobs:
           context: .
           file: apps/api/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/gamehub-api:latest
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/gamehub-api:latest
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/gamehub-web:latest
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/gamehub-web:latest
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.${{ vars.DOMAIN }}/api/v1
             NEXT_PUBLIC_GAMES_BASE_URL=https://games.${{ vars.DOMAIN }}
