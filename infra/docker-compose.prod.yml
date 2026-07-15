@@ -29,7 +29,9 @@ services:
       COOKIE_SECURE: 'true'
       JWT_SECRET: ${JWT_SECRET}
       JWT_GUEST_SECRET: ${JWT_GUEST_SECRET}
-      API_PUBLIC_URL: https://api.${DOMAIN}
+      # OAuth callbacks use the same-origin API proxy so the resulting auth
+      # cookies belong to the portal host as well.
+      API_PUBLIC_URL: https://${DOMAIN}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
@@ -44,8 +46,7 @@ services:
     restart: unless-stopped
     environment:
       # Server-side rendering talks to the API over the internal Docker
-      # network, so the homepage no longer depends on the public api.<domain>
-      # cert being ready. (The browser still uses NEXT_PUBLIC_API_URL.)
+      # network. Browser calls use the portal's same-origin /api proxy.
       API_URL: http://api:4000/api/v1
     depends_on:
       - api

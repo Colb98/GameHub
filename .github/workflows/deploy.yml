@@ -16,6 +16,14 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: Validate deployment configuration
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: |
+          if [ -z "$DOMAIN" ]; then
+            echo "Repository variable DOMAIN is required" >&2
+            exit 1
+          fi
       # GHCR requires lowercase repository names; the owner "Colb98" is not,
       # and Actions expressions have no lowercase function — do it in bash
       - name: Compute lowercase image owner
@@ -38,7 +46,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/gamehub-web:latest
           build-args: |
-            NEXT_PUBLIC_API_URL=https://api.${{ vars.DOMAIN }}/api/v1
+            NEXT_PUBLIC_API_URL=/api/v1
             NEXT_PUBLIC_GAMES_BASE_URL=https://games.${{ vars.DOMAIN }}
             API_URL=http://api:4000/api/v1
 
@@ -46,13 +54,27 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-push
     steps:
+      - uses: actions/checkout@v4
+      - name: Upload production configuration
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: infra/docker-compose.prod.yml,infra/Caddyfile
+          target: /opt/gamehub
+          strip_components: 1
+          overwrite: true
       - uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -eu
             cd /opt/gamehub
+            docker compose -f docker-compose.prod.yml config --quiet
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
             docker system prune -f

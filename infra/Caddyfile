@@ -1,7 +1,17 @@
 # Automatic HTTPS via Let's Encrypt. Set DOMAIN in the compose environment.
 {$DOMAIN} {
 	encode gzip
-	reverse_proxy web:3000
+
+	# Keep browser API calls on the portal origin. Besides avoiding a hard
+	# dependency on api.<domain> DNS/CORS, this makes auth cookies available to
+	# both client-side calls and server-rendered portal requests.
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
 }
 
 api.{$DOMAIN} {

@@ -86,15 +86,20 @@ admin score deletion.
 
 1. **DNS/Cloudflare:** point `DOMAIN`, `api.DOMAIN`, `games.DOMAIN` at the VPS,
    proxied through Cloudflare (DDoS/WAF + hides the origin IP).
+   Portal browser requests use the same-origin `/api` proxy; `api.DOMAIN`
+   remains the public endpoint for native or third-party API clients.
 2. **VPS one-time (CentOS Stream 8/9, Rocky/Alma):** run
    `infra/deploy/setup-vps.sh` as root (firewalld, fail2ban, Docker), copy
    `infra/docker-compose.prod.yml`, `infra/Caddyfile` and a filled-in `.env`
    (from `infra/.env.prod.example`) to `/opt/gamehub`. SELinux stays enforcing;
    the Caddyfile bind mount already carries the `:z` relabel suffix.
 3. **GitHub:** set repo secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` and repo
-   variable `DOMAIN`. Every push to `main` builds images and redeploys
-   (`.github/workflows/deploy.yml`).
-4. **Backups:** schedule `infra/deploy/backup.sh` via cron (nightly `pg_dump`,
+   variable `DOMAIN`. Every push to `main` builds images, syncs the production
+   Caddy/Compose configuration, and redeploys (`.github/workflows/deploy.yml`).
+4. **OAuth (optional):** register callback URLs on the portal origin, for
+   example `https://DOMAIN/api/v1/auth/google/callback` and
+   `https://DOMAIN/api/v1/auth/facebook/callback`.
+5. **Backups:** schedule `infra/deploy/backup.sh` via cron (nightly `pg_dump`,
    optional rclone offsite copy).
 
 ## Security notes
