@@ -19,7 +19,7 @@ services:
       - caddy_config:/config
 
   api:
-    image: ${API_IMAGE:-ghcr.io/OWNER/gamehub-api:latest}
+    image: ${API_IMAGE:-ghcr.io/colb98/gamehub-api:latest}
     restart: unless-stopped
     environment:
       PORT: 4000
@@ -42,7 +42,7 @@ services:
       - postgres
 
   web:
-    image: ${WEB_IMAGE:-ghcr.io/OWNER/gamehub-web:latest}
+    image: ${WEB_IMAGE:-ghcr.io/colb98/gamehub-web:latest}
     restart: unless-stopped
     environment:
       # Server-side rendering talks to the API over the internal Docker
