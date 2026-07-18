@@ -14,11 +14,26 @@ export function Header() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [guestName, setGuestName] = useState<string | null>(null);
 
+  // Re-check auth on every client navigation. The header lives in the
+  // persistent layout, so after a client-side login redirect (router.push)
+  // it would otherwise keep its logged-out state until a full page reload.
   useEffect(() => {
+    let active = true;
     api<UserProfile>('/me')
-      .then(setUser)
-      .catch(() => setGuestName(getGuest()?.name ?? null));
-  }, []);
+      .then((u) => {
+        if (!active) return;
+        setUser(u);
+        setGuestName(null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setUser(null);
+        setGuestName(getGuest()?.name ?? null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   async function logout() {
     await api('/auth/logout', { method: 'POST', body: JSON.stringify({}) });
