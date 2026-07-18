@@ -1,33 +1,163 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ---------------------------------------------------------------------------
+ * GameHub design tokens — from the "GameHub Prototype" Claude Design project.
+ * Light = warm cream canvas / white surfaces; dark = warm charcoal equivalents.
+ * ------------------------------------------------------------------------- */
 :root {
+  color-scheme: light;
+  --canvas: #eeece4;
+  --surface: #ffffff;
+  --surface-2: #faf9f5;
+  --chip: #f4f2ec;
+  --line: #e6e2d7;
+  --line-soft: #f0eee6;
+  --ink: #211f1c;
+  --body-ink: #3a362f;
+  --muted: #79746a;
+  --accent: #6d5ae6;
+  --star: #d99a12;
+  --player: #171512;
+  --cover-l1: 0.94;
+  --cover-c1: 0.045;
+  --cover-l2: 0.8;
+  --cover-c2: 0.11;
+}
+
+[data-theme='dark'] {
   color-scheme: dark;
+  --canvas: #14120f;
+  --surface: #1e1b17;
+  --surface-2: #191713;
+  --chip: #292520;
+  --line: #37322a;
+  --line-soft: #2b2721;
+  --ink: #f2efe7;
+  --body-ink: #d3ccbe;
+  --muted: #9c9484;
+  --accent: #8b7cf0;
+  --star: #e3ac2e;
+  --player: #0d0b09;
+  --cover-l1: 0.4;
+  --cover-c1: 0.05;
+  --cover-l2: 0.55;
+  --cover-c2: 0.11;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-chip: var(--chip);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-ink: var(--ink);
+  --color-body: var(--body-ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-star: var(--star);
+  --color-player: var(--player);
+
+  --font-sans: var(--font-manrope), 'Manrope', sans-serif;
+  --font-display: var(--font-fredoka), 'Fredoka', sans-serif;
+
+  /* Legacy palette remap: pages still using slate/indigo utilities pick up the
+   * token system (and therefore dark mode) without a rewrite. */
+  --color-slate-950: var(--canvas);
+  --color-slate-900: var(--surface);
+  --color-slate-800: var(--line);
+  --color-slate-700: var(--line);
+  --color-slate-600: var(--muted);
+  --color-slate-500: var(--muted);
+  --color-slate-400: var(--muted);
+  --color-slate-300: var(--body-ink);
+  --color-slate-200: var(--ink);
+  --color-slate-100: var(--ink);
+  --color-indigo-500: var(--accent);
+  --color-indigo-400: var(--accent);
+  --color-indigo-300: var(--accent);
+  --color-indigo-200: var(--accent);
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-canvas font-sans text-ink antialiased;
 }
 
-.card {
-  @apply rounded-xl border border-slate-800 bg-slate-900/60;
+a {
+  color: inherit;
 }
 
-.btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50;
+@layer components {
+  .card {
+    @apply rounded-2xl border-[1.5px] border-line bg-surface;
+  }
+
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-accent px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-default disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-[10px] border-[1.5px] border-line bg-surface px-5 py-2.5 text-sm font-bold text-ink transition hover:bg-chip disabled:cursor-default disabled:opacity-50;
+  }
+
+  /* Strong outline button (prototype "Clear All" / "Load More") */
+  .btn-outline {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border-[1.5px] border-ink bg-surface px-5 py-2.5 text-sm font-bold text-ink transition hover:bg-chip disabled:cursor-default disabled:opacity-50;
+  }
+
+  .input {
+    @apply w-full rounded-[10px] border-[1.5px] border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-muted focus:border-accent;
+  }
+
+  .chip {
+    @apply inline-flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] border-line bg-surface px-3.5 py-1.5 text-xs font-semibold text-ink transition hover:bg-chip;
+  }
+
+  .chip-active {
+    @apply border-accent bg-accent text-white hover:bg-accent;
+  }
+
+  .tab-pill {
+    @apply cursor-pointer rounded-full px-3 py-1 text-[11px] font-bold transition;
+  }
+
+  /* "You" leaderboard highlight */
+  .row-me {
+    background: color-mix(in oklch, var(--accent) 15%, var(--surface));
+  }
+
+  /* Developer-authored controls HTML rendered as prototype-style rows */
+  .controls-prose ul {
+    @apply flex list-none flex-col gap-1.5 p-0;
+  }
+  .controls-prose li {
+    @apply flex items-center justify-between gap-3 rounded-lg bg-chip px-3.5 py-2 text-[13px] text-body;
+  }
+  .controls-prose li b,
+  .controls-prose li strong {
+    @apply font-bold text-ink;
+  }
+  .controls-prose p {
+    @apply text-[13px] text-body;
+  }
 }
 
-.btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50;
+/* Hide scrollbars on horizontal mobile rails while keeping them scrollable */
+.rail-scroll {
+  scrollbar-width: none;
+}
+.rail-scroll::-webkit-scrollbar {
+  display: none;
 }
 
-.input {
-  @apply w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-indigo-400;
-}
-
-.game-tile-gradient {
-  background: linear-gradient(
-    135deg,
-    var(--tile-from, #6366f1),
-    var(--tile-to, #0ea5e9)
-  );
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

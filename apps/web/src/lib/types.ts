@@ -12,6 +12,11 @@ export interface GameCard {
   featuredRank: number | null;
 }
 
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
 export interface GameDetail extends GameCard {
   scoreOrder: 'DESC' | 'ASC';
   developerName: string;

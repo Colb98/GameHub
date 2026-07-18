@@ -48,11 +48,11 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <div className="card flex items-center gap-4 p-6">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500 text-2xl font-black">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500 text-2xl font-display font-bold">
           {user.displayName[0]?.toUpperCase()}
         </div>
         <div>
-          <h1 className="text-2xl font-black">{user.displayName}</h1>
+          <h1 className="text-2xl font-display font-bold">{user.displayName}</h1>
           <p className="text-sm text-slate-400">
             {user.email} · {user.role}
           </p>

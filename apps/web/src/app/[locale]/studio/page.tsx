@@ -7,12 +7,12 @@ import { api } from '@/lib/client-api';
 import type { StudioGame } from '@/lib/types';
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: 'bg-slate-700 text-slate-200',
-  SUBMITTED: 'bg-amber-500/20 text-amber-300',
-  IN_REVIEW: 'bg-amber-500/20 text-amber-300',
-  PUBLISHED: 'bg-emerald-500/20 text-emerald-300',
-  REJECTED: 'bg-rose-500/20 text-rose-300',
-  DELISTED: 'bg-slate-700 text-slate-400',
+  DRAFT: 'bg-chip text-ink',
+  SUBMITTED: 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+  IN_REVIEW: 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+  PUBLISHED: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
+  REJECTED: 'bg-rose-500/20 text-rose-700 dark:text-rose-300',
+  DELISTED: 'bg-chip text-muted',
 };
 
 export default function StudioPage() {
@@ -63,7 +63,7 @@ export default function StudioPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black">🛠 {t('title')}</h1>
+        <h1 className="text-2xl font-display font-bold">🛠 {t('title')}</h1>
         <Link href="/studio/new" className="btn">
           + {t('newGame')}
         </Link>
@@ -121,7 +121,7 @@ function StudioGameRow({
         )}
       </div>
       {game.rejectReason && (
-        <p className="rounded border border-rose-500/40 bg-rose-500/10 p-2 text-sm text-rose-300">
+        <p className="rounded border border-rose-500/40 bg-rose-500/10 p-2 text-sm text-rose-700 dark:text-rose-300">
           {game.rejectReason}
         </p>
       )}
@@ -142,7 +142,7 @@ function StudioGameRow({
           type="file"
           accept=".zip"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm text-slate-400 file:mr-3 file:rounded file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-sm file:text-white"
+          className="text-sm text-slate-400 file:mr-3 file:rounded file:border-0 file:bg-chip file:px-3 file:py-1.5 file:text-sm file:text-ink"
         />
         <button
           className="btn-ghost"

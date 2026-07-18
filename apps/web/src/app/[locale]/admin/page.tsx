@@ -21,7 +21,7 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-black">🛡 {t('title')}</h1>
+      <h1 className="text-2xl font-display font-bold">🛡 {t('title')}</h1>
       {games.length === 0 ? (
         <p className="text-slate-500">{t('empty')}</p>
       ) : (
@@ -42,7 +42,7 @@ export default function AdminPage() {
                     {g.versions.map((v) => v.semver).join(', ') || '—'}
                   </p>
                 </div>
-                <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
                   {g.status}
                 </span>
               </Link>

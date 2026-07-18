@@ -37,7 +37,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
   return (
     <div className="mx-auto mt-8 w-full max-w-sm space-y-6">
-      <h1 className="text-center text-2xl font-black">
+      <h1 className="text-center text-2xl font-display font-bold">
         {mode === 'login' ? t('login') : t('register')}
       </h1>
       <div className="space-y-2">

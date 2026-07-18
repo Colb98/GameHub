@@ -46,9 +46,9 @@ export default function AdminReviewPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-black">{name}</h1>
+        <h1 className="text-2xl font-display font-bold">{name}</h1>
         <code className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">/{game.slug}</code>
-        <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+        <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
           {game.status}
         </span>
         <span className="text-sm text-slate-500">
@@ -65,7 +65,7 @@ export default function AdminReviewPage({
             <p className="font-bold">{tr.name}</p>
             <p className="text-slate-400">{tr.shortIntro}</p>
             <div
-              className="prose prose-sm prose-invert text-slate-300"
+              className="controls-prose"
               dangerouslySetInnerHTML={{ __html: tr.controlsHtml }}
             />
           </div>

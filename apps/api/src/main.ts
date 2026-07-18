@@ -39,6 +39,27 @@ async function bootstrap() {
     decorateReply: false,
   });
 
+  // Game bundles are embedded in an iframe by the portal, which runs on a
+  // different origin in dev (:3000 vs :4000). Helmet's default
+  // X-Frame-Options: SAMEORIGIN would block that, so swap it for a
+  // frame-ancestors policy that allows the portal origin.
+  const webOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .join(' ');
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', (req: any, reply: any, payload: any, done: any) => {
+      if (req.url?.startsWith('/g/')) {
+        reply.removeHeader('x-frame-options');
+        reply.header(
+          'content-security-policy',
+          `frame-ancestors 'self' ${webOrigins}`,
+        );
+      }
+      done(null, payload);
+    });
+
   app.enableCors({
     origin: (process.env.WEB_ORIGIN ?? 'http://localhost:3000').split(','),
     credentials: true,

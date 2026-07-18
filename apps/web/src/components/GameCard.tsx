@@ -1,48 +1,58 @@
 import { Link } from '@/i18n/routing';
+import { coverGradient, isNewGame } from '@/lib/cover';
 import type { GameCard as GameCardType } from '@/lib/types';
+import { FavoriteButton } from './FavoriteButton';
 
-/** Deterministic gradient per game so tiles look distinct without cover art. */
-function tileColors(slug: string): { from: string; to: string } {
-  let hash = 0;
-  for (const ch of slug) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  const hue1 = hash % 360;
-  const hue2 = (hue1 + 60) % 360;
-  return {
-    from: `hsl(${hue1} 70% 45%)`,
-    to: `hsl(${hue2} 70% 35%)`,
-  };
-}
-
-export function GameCard({ game }: { game: GameCardType }) {
-  const { from, to } = tileColors(game.slug);
+/** Prototype game card: gradient cover with badge + favorite overlay, then a
+ *  display-font title and a rating/plays meta row. */
+export function GameCard({
+  game,
+  showMeta = true,
+}: {
+  game: GameCardType;
+  showMeta?: boolean;
+}) {
   return (
     <Link
       href={`/games/${game.slug}`}
-      className="card group block overflow-hidden transition hover:border-indigo-500/60"
+      className="group flex cursor-pointer flex-col gap-1.5"
     >
       <div
-        className="game-tile-gradient flex h-32 items-center justify-center p-3 text-center"
-        style={{ '--tile-from': from, '--tile-to': to } as React.CSSProperties}
+        className="relative aspect-[4/3] overflow-hidden rounded-xl transition group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_18px_rgba(0,0,0,.12)]"
+        style={{ background: coverGradient(game.slug) }}
       >
-        <span className="text-xl font-black text-white drop-shadow-md">
+        <span className="absolute inset-0 flex items-center justify-center px-2 text-center font-display text-base font-bold break-words text-black/45 dark:text-white/70">
           {game.name}
         </span>
-      </div>
-      <div className="space-y-1 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-semibold group-hover:text-indigo-300">
-            {game.name}
+        {isNewGame(game.releaseDate) && (
+          <span className="absolute top-2 left-2 rounded-md bg-accent px-2 py-[3px] text-[9px] font-bold text-white">
+            NEW
           </span>
-          <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">
-            {game.category}
-          </span>
-        </div>
-        <p className="line-clamp-2 text-xs text-slate-400">{game.shortIntro}</p>
-        <div className="flex items-center gap-3 pt-1 text-xs text-slate-500">
-          <span>⭐ {game.ratingAvg ? game.ratingAvg.toFixed(1) : '—'}</span>
-          <span>▶ {game.playCount.toLocaleString()}</span>
-        </div>
+        )}
+        <span className="absolute top-2 right-2">
+          <FavoriteButton game={{ id: game.id, name: game.name }} />
+        </span>
       </div>
+      <span className="truncate font-display text-[13px] font-semibold text-ink">
+        {game.name}
+      </span>
+      {showMeta && (
+        <span className="flex items-center justify-between text-[11px] text-muted">
+          <span>★ {game.ratingAvg ? game.ratingAvg.toFixed(1) : '—'}</span>
+          <span>{game.playCount.toLocaleString()}</span>
+        </span>
+      )}
     </Link>
+  );
+}
+
+/** Loading skeleton matching the card layout. */
+export function GameCardSkeleton() {
+  return (
+    <div className="flex animate-pulse flex-col gap-1.5">
+      <div className="aspect-[4/3] rounded-xl bg-chip" />
+      <div className="h-3.5 w-3/4 rounded bg-chip" />
+      <div className="h-3 w-1/2 rounded bg-chip" />
+    </div>
   );
 }

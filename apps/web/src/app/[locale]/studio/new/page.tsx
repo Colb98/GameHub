@@ -64,7 +64,7 @@ export default function NewGamePage() {
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-2xl font-black">+ {t('newGame')}</h1>
+      <h1 className="text-2xl font-display font-bold">+ {t('newGame')}</h1>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-1 text-sm">
           <span className="text-slate-400">{t('slug')}</span>
