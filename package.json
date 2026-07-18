@@ -15,7 +15,9 @@
     "seed": "pnpm --filter @gamehub/api seed"
   },
   "devDependencies": {
+    "adm-zip": "^0.5.16",
     "embedded-postgres": "18.4.0-beta.17",
+    "qrcode": "^1.5.4",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   },
