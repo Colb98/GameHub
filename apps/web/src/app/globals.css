@@ -144,6 +144,21 @@ a {
   }
 }
 
+/* iOS Safari (and every iOS browser — they are all WebKit) auto-zooms the
+ * page when a focused form control has a font-size below 16px, and the zoom
+ * sticks after the keyboard closes: the layout is then wider than the visual
+ * viewport, which shows up as a horizontal scrollbar or a cropped game view.
+ * Keeping controls at 16px on touch devices prevents the zoom trigger without
+ * resorting to maximum-scale=1 (which would disable pinch-zoom on Android).
+ * Unlayered on purpose: it must override the layered .input/text-* utilities. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Hide scrollbars on horizontal mobile rails while keeping them scrollable */
 .rail-scroll {
   scrollbar-width: none;
