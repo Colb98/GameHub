@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { createGameHost, type GameOverPayload } from '@gamehub/sdk';
+import { createGameHost, type GameHost, type GameOverPayload } from '@gamehub/sdk';
 import { Link } from '@/i18n/routing';
 import { api, ensureGuest, getGuest, GAMES_BASE_URL } from '@/lib/client-api';
 import { coverGradient } from '@/lib/cover';
@@ -58,6 +58,7 @@ export function PlayShell({ game }: { game: GameDetail }) {
   const [progress, setProgress] = useState(0);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const hostRef = useRef<GameHost | null>(null);
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
@@ -166,8 +167,12 @@ export function PlayShell({ game }: { game: GameDetail }) {
       },
       onGameOver,
     });
-    return () => host.dispose();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- muted only applies to the next run
+    hostRef.current = host;
+    return () => {
+      hostRef.current = null;
+      host.dispose();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- muted is applied live via hostRef.setMuted, not by re-wiring the bridge
   }, [session, runKey, identity, locale, game.orientation, onGameOver]);
 
   async function submitName() {
@@ -185,10 +190,10 @@ export function PlayShell({ game }: { game: GameDetail }) {
   }
 
   function toggleMute() {
-    setMuted((m) => {
-      showToast(m ? t('soundOn') : t('mutedNextRun'));
-      return !m;
-    });
+    const next = !muted;
+    setMuted(next);
+    hostRef.current?.setMuted(next);
+    showToast(next ? t('soundOff') : t('soundOn'));
   }
 
   if (!game.activeVersion) return null;

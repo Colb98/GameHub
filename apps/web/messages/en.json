@@ -115,7 +115,7 @@
     "mute": "Mute",
     "unmute": "Unmute",
     "soundOn": "Sound on",
-    "mutedNextRun": "Muted — applies from the next run",
+    "soundOff": "Sound off",
     "restart": "Restart",
     "panel": "Leaderboard & controls",
     "boardHandle": "Leaderboard & Controls",

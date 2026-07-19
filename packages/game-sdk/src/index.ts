@@ -8,6 +8,7 @@
  *
  * Handshake:  game -> `ready`  ->  shell -> `init`  ->  game plays
  * Game over:  game -> `gameOver { score, durationMs }` -> shell submits score
+ * Live:       shell -> `setMuted <boolean>` -> game mutes/unmutes its audio
  */
 
 export const PROTOCOL_VERSION = 1;
@@ -52,7 +53,10 @@ export interface GameHubClient {
   locale: string;
   playerName: string | null;
   orientation: Orientation;
+  /** Current sound state; also updated live when the shell toggles sound. */
   muted: boolean;
+  /** Subscribe to live sound toggles from the shell's Sound Control. */
+  onMutedChange(cb: (muted: boolean) => void): void;
   /** Report the final result. Call exactly once per run. */
   gameOver(result: GameOverPayload): void;
 }
@@ -72,6 +76,7 @@ export function initGameHub(): Promise<GameHubClient> {
       playerName: null,
       orientation: 'BOTH',
       muted: false,
+      onMutedChange: () => undefined,
       gameOver: (result) =>
         console.info('[GameHub SDK] standalone gameOver:', result),
     });
@@ -98,12 +103,16 @@ export function initGameHub(): Promise<GameHubClient> {
       window.removeEventListener('message', onMessage);
       const init = event.data.payload as InitPayload;
       let reported = false;
-      resolve({
+      const muteCbs: ((muted: boolean) => void)[] = [];
+      const client: GameHubClient = {
         standalone: false,
         locale: init.locale,
         playerName: init.player?.name ?? null,
         orientation: init.orientation,
         muted: init.muted,
+        onMutedChange(cb: (muted: boolean) => void) {
+          muteCbs.push(cb);
+        },
         gameOver(result: GameOverPayload) {
           if (reported) return;
           reported = true;
@@ -112,7 +121,14 @@ export function initGameHub(): Promise<GameHubClient> {
             '*',
           );
         },
+      };
+      // Stays attached for the life of the run: live sound toggles from the shell.
+      window.addEventListener('message', (e: MessageEvent) => {
+        if (!isEnvelope(e.data) || e.data.type !== 'setMuted') return;
+        client.muted = Boolean(e.data.payload);
+        for (const cb of muteCbs) cb(client.muted);
       });
+      resolve(client);
     }
 
     window.addEventListener('message', onMessage);
@@ -133,6 +149,8 @@ export interface GameHostOptions {
 }
 
 export interface GameHost {
+  /** Live sound toggle: forwarded to the running game as `setMuted`. */
+  setMuted(muted: boolean): void;
   dispose(): void;
 }
 
@@ -161,6 +179,12 @@ export function createGameHost(
 
   window.addEventListener('message', onMessage);
   return {
+    setMuted(muted: boolean) {
+      iframe.contentWindow?.postMessage(
+        { gh: PROTOCOL_VERSION, type: 'setMuted', payload: muted },
+        options.gameOrigin,
+      );
+    },
     dispose() {
       window.removeEventListener('message', onMessage);
     },
