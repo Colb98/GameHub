@@ -153,7 +153,10 @@
     "submitReview": "Submit for review",
     "status": "Status",
     "versions": "Versions",
-    "noGames": "No games yet. Create your first one!"
+    "noGames": "No games yet. Create your first one!",
+    "uploadSuccess": "Version {semver} of “{name}” uploaded successfully.",
+    "uploadSuccessPending": "Version {semver} of “{name}” uploaded successfully — it will go live once an admin approves it.",
+    "updatePending": "Update pending review"
   },
   "admin": {
     "title": "Review queue",
@@ -163,7 +166,9 @@
     "testPlay": "Test play",
     "developer": "Developer",
     "versions": "Versions",
-    "empty": "Nothing waiting for review."
+    "empty": "Nothing waiting for review.",
+    "updateBadge": "Update",
+    "currentlyLive": "Currently live: v{semver}. Approving replaces it with v{next}."
   },
   "profile": {
     "title": "Your profile",

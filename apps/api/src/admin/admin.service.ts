@@ -12,7 +12,15 @@ export class AdminService {
 
   listGames(status?: GameStatus) {
     return this.prisma.game.findMany({
-      where: status ? { status } : { status: { in: ['SUBMITTED', 'IN_REVIEW'] } },
+      where: status
+        ? { status }
+        : {
+            OR: [
+              { status: { in: ['SUBMITTED', 'IN_REVIEW'] } },
+              // Published games whose developer uploaded a new version
+              { status: 'PUBLISHED', updateSubmittedAt: { not: null } },
+            ],
+          },
       include: {
         translations: true,
         versions: { orderBy: { uploadedAt: 'desc' } },
@@ -55,6 +63,7 @@ export class AdminService {
           status: 'PUBLISHED',
           releaseDate: game.releaseDate ?? new Date(),
           rejectReason: null,
+          updateSubmittedAt: null,
         },
       }),
     ]);
@@ -62,7 +71,14 @@ export class AdminService {
   }
 
   async reject(id: string, reason: string) {
-    await this.gameDetail(id);
+    const game = await this.gameDetail(id);
+    if (game.status === 'PUBLISHED') {
+      // Rejecting a version update: the game stays live on its active bundle
+      return this.prisma.game.update({
+        where: { id },
+        data: { updateSubmittedAt: null, rejectReason: reason },
+      });
+    }
     return this.prisma.game.update({
       where: { id },
       data: { status: 'REJECTED', rejectReason: reason },

@@ -100,9 +100,18 @@ export class StudioService {
     const bundlePath = `${game.slug}/${semver}`;
     extractGameBundle(zipBuffer, path.join(storageRoot(), game.slug, semver));
 
-    return this.prisma.gameVersion.create({
+    const version = await this.prisma.gameVersion.create({
       data: { gameId, semver, bundlePath },
     });
+    if (game.status === 'PUBLISHED') {
+      // Updates to live games go straight to the admin review queue;
+      // the game keeps serving its active bundle until the update is approved.
+      await this.prisma.game.update({
+        where: { id: gameId },
+        data: { updateSubmittedAt: new Date(), rejectReason: null },
+      });
+    }
+    return version;
   }
 
   async submit(developerId: string, gameId: string) {

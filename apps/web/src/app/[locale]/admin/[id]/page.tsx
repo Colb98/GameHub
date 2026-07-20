@@ -41,6 +41,7 @@ export default function AdminReviewPage({
 
   if (!game) return null;
   const latest = game.versions[0];
+  const live = game.versions.find((v) => v.isActive);
   const name = game.translations.find((tr) => tr.locale === 'en')?.name ?? game.slug;
 
   return (
@@ -51,6 +52,11 @@ export default function AdminReviewPage({
         <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
           {game.status}
         </span>
+        {game.updateSubmittedAt && (
+          <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:text-sky-300">
+            {t('updateBadge')}
+          </span>
+        )}
         <span className="text-sm text-slate-500">
           {t('developer')}: {game.developer?.displayName} ({game.developer?.email})
         </span>
@@ -77,6 +83,11 @@ export default function AdminReviewPage({
           <h2 className="font-bold">
             🎮 {t('testPlay')} — v{latest.semver}
           </h2>
+          {live && live.id !== latest.id && (
+            <p className="text-sm text-slate-500">
+              {t('currentlyLive', { semver: live.semver, next: latest.semver })}
+            </p>
+          )}
           {/* Standalone test-play: the bundle runs without a session (SDK falls back) */}
           <iframe
             src={`${GAMES_BASE_URL}/${latest.bundlePath}/index.html`}

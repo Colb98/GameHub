@@ -21,6 +21,7 @@ export default function StudioPage() {
   const [games, setGames] = useState<StudioGame[] | null>(null);
   const [uploadBusy, setUploadBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api<StudioGame[]>('/studio/games')
@@ -33,6 +34,7 @@ export default function StudioPage() {
   async function uploadVersion(game: StudioGame, file: File, semver: string) {
     setUploadBusy(game.id);
     setError(null);
+    setSuccess(null);
     try {
       const form = new FormData();
       form.append('file', file);
@@ -40,6 +42,14 @@ export default function StudioPage() {
         method: 'POST',
         body: form,
       });
+      const name = game.translations.find((tr) => tr.locale === 'en')?.name ?? game.slug;
+      // Published games: the upload is auto-submitted and waits for admin approval
+      setSuccess(
+        t(game.status === 'PUBLISHED' ? 'uploadSuccessPending' : 'uploadSuccess', {
+          semver,
+          name,
+        }),
+      );
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
@@ -50,6 +60,7 @@ export default function StudioPage() {
 
   async function submitForReview(game: StudioGame) {
     setError(null);
+    setSuccess(null);
     try {
       await api(`/studio/games/${game.id}/submit`, { method: 'POST', body: JSON.stringify({}) });
       load();
@@ -69,6 +80,11 @@ export default function StudioPage() {
         </Link>
       </div>
       {error && <p className="text-sm text-rose-400">{error}</p>}
+      {success && (
+        <p className="rounded border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm text-emerald-700 dark:text-emerald-300">
+          ✓ {success}
+        </p>
+      )}
       {games.length === 0 ? (
         <p className="text-slate-500">{t('noGames')}</p>
       ) : (
@@ -114,6 +130,11 @@ function StudioGameRow({
         <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[game.status] ?? ''}`}>
           {game.status}
         </span>
+        {game.updateSubmittedAt && (
+          <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+            {t('updatePending')}
+          </span>
+        )}
         {game.status === 'PUBLISHED' && (
           <Link href={`/games/${game.slug}`} className="text-sm text-indigo-300 underline">
             → {game.slug}

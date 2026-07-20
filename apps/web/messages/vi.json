@@ -153,7 +153,10 @@
     "submitReview": "Gửi xét duyệt",
     "status": "Trạng thái",
     "versions": "Phiên bản",
-    "noGames": "Chưa có game nào. Hãy tạo game đầu tiên!"
+    "noGames": "Chưa có game nào. Hãy tạo game đầu tiên!",
+    "uploadSuccess": "Đã tải lên phiên bản {semver} của “{name}” thành công.",
+    "uploadSuccessPending": "Đã tải lên phiên bản {semver} của “{name}” thành công — phiên bản sẽ được phát hành sau khi quản trị viên duyệt.",
+    "updatePending": "Bản cập nhật đang chờ xét duyệt"
   },
   "admin": {
     "title": "Hàng đợi xét duyệt",
@@ -163,7 +166,9 @@
     "testPlay": "Chơi thử",
     "developer": "Nhà phát triển",
     "versions": "Phiên bản",
-    "empty": "Không có gì chờ xét duyệt."
+    "empty": "Không có gì chờ xét duyệt.",
+    "updateBadge": "Bản cập nhật",
+    "currentlyLive": "Đang chạy: v{semver}. Duyệt sẽ thay bằng v{next}."
   },
   "profile": {
     "title": "Hồ sơ của bạn",

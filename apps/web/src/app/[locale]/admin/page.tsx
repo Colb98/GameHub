@@ -42,8 +42,15 @@ export default function AdminPage() {
                     {g.versions.map((v) => v.semver).join(', ') || '—'}
                   </p>
                 </div>
-                <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                  {g.status}
+                <span className="flex flex-col items-end gap-1">
+                  <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    {g.status}
+                  </span>
+                  {g.updateSubmittedAt && (
+                    <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:text-sky-300">
+                      {t('updateBadge')}
+                    </span>
+                  )}
                 </span>
               </Link>
             );

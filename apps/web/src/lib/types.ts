@@ -71,6 +71,8 @@ export interface StudioGame {
   category: string;
   orientation: string;
   rejectReason: string | null;
+  /** Set while a new version of a published game awaits admin review */
+  updateSubmittedAt: string | null;
   translations: {
     locale: string;
     name: string;

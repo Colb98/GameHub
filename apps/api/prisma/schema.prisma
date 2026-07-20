@@ -93,33 +93,35 @@ model RefreshToken {
 }
 
 model Game {
-  id            String            @id @default(cuid())
-  slug          String            @unique
-  developerId   String
-  developer     User              @relation("DeveloperGames", fields: [developerId], references: [id])
-  status        GameStatus        @default(DRAFT)
-  category      String
-  orientation   Orientation       @default(BOTH)
-  scoreOrder    ScoreOrder        @default(DESC)
+  id                String            @id @default(cuid())
+  slug              String            @unique
+  developerId       String
+  developer         User              @relation("DeveloperGames", fields: [developerId], references: [id])
+  status            GameStatus        @default(DRAFT)
+  category          String
+  orientation       Orientation       @default(BOTH)
+  scoreOrder        ScoreOrder        @default(DESC)
   /// Server-side anti-cheat: scores above this are rejected (null = no ceiling)
-  maxScore      Int?
+  maxScore          Int?
   /// Server-side anti-cheat: matches shorter than this are rejected
-  minDurationMs Int               @default(2000)
-  releaseDate   DateTime?
-  playCount     Int               @default(0)
-  ratingAvg     Float             @default(0)
-  ratingCount   Int               @default(0)
-  featuredRank  Int?
-  rejectReason  String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  translations  GameTranslation[]
-  versions      GameVersion[]
-  sessions      PlaySession[]
-  scores        Score[]
-  comments      Comment[]
-  ratings       Rating[]
-  favorites     Favorite[]
+  minDurationMs     Int               @default(2000)
+  releaseDate       DateTime?
+  playCount         Int               @default(0)
+  ratingAvg         Float             @default(0)
+  ratingCount       Int               @default(0)
+  featuredRank      Int?
+  rejectReason      String?
+  /// When set, a newly uploaded version of this PUBLISHED game awaits admin review
+  updateSubmittedAt DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  translations      GameTranslation[]
+  versions          GameVersion[]
+  sessions          PlaySession[]
+  scores            Score[]
+  comments          Comment[]
+  ratings           Rating[]
+  favorites         Favorite[]
 }
 
 model GameTranslation {
