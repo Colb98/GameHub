@@ -12,9 +12,16 @@ const H = 800;
 const START_LIVES = 3;
 
 /* ------------------------------- wave config ------------------------------- */
-const WAVES_PER_CYCLE = 5; // last wave of each cycle is the boss wave
+const WAVES_PER_CYCLE = 5; // last wave of each cycle is a boss wave (sub-boss or boss)
+const TIER_WAVES = WAVES_PER_CYCLE * 2; // one sub-boss + one boss per tier
 const WAVE_BANNER_MS = 1500;
 const WAVE_CLEAR_DELAY_MS = 800;
+
+// Mob difficulty and boss identity (roster/HP/palette) both advance on this
+// cadence — wave 5's sub-boss and wave 10's boss share tier 1, etc.
+function waveTier(n: number): number {
+  return Math.floor((n - 1) / TIER_WAVES) + 1;
+}
 
 /* --------------------------------- scoring -------------------------------- */
 const KILL_SCORE = 100; // per normal enemy; the SCORE pickup grants the same
@@ -32,7 +39,10 @@ const DROP_RATE_TYPE2 = 0.05; // fire-line power-up on normal mobs (boss: always
 const DROP_RATE_TYPE1 = 0.4; // damage power-up
 const DROP_RATE_SCORE = 0.25; // bonus score pickup
 const ITEM_FALL_SPEED = 110;
-const BOSS_HP_ITEM_EVERY = 4; // every 4th boss (waves 20, 40, ...) drops a heart
+// Every 2nd *tier's* full boss drops a heart — tiers now span 10 waves (vs the
+// old 5-wave level), so halving the modulus keeps hearts on the same real
+// wave numbers as before (20, 40, ...). Sub-bosses never drop hearts.
+const BOSS_HP_ITEM_EVERY = 2;
 
 /* --------------------------------- enemies -------------------------------- */
 const ENEMY_FAN_MAX_LEVEL = 8; // levels 1..8 only have the cone attack, on a timer
@@ -69,6 +79,185 @@ const BOSS_AIMED_SPEED = 270;
 const BOSS_SKILL_GAP_MS = 900; // pause between boss moves (moves never overlap)
 const BOSS_AIMED_SHOTS = 6;
 const BOSS_AIMED_GAP_MS = 110;
+// Cruising speed for every boss horizontal move — entrance glide, strafe, and
+// any skill's reposition-to-anchor — so repositioning never looks like a snap
+// relative to the normal strafe.
+const BOSS_MOVE_SPEED = 175; // px/s
+const BOSS_MOVE_MIN_MS = 150; // floor so a very short hop still animates smoothly
+
+/* ---------------------------------- phase ----------------------------------- */
+// Placeholder thresholds — real per-phase move pools/behavior TBD.
+// Phase is only ever (re)computed between boss moves, never mid-pattern.
+const BOSS_PHASE_THRESHOLDS = [0.7, 0.35]; // phase 2 at <=70% HP, phase 3 at <=35%
+type BossPhase = 1 | 2 | 3;
+function bossPhase(hpRatio: number): BossPhase {
+  if (hpRatio <= BOSS_PHASE_THRESHOLDS[1]) return 3;
+  if (hpRatio <= BOSS_PHASE_THRESHOLDS[0]) return 2;
+  return 1;
+}
+
+/* ------------------------------ boss skills (touhou) ------------------------------ */
+// Celestial Peony — counter-rotating spiral rings ('curved' motion mode).
+const PEONY_RINGS = 12;
+const PEONY_RINGS_HARD = 14;
+const PEONY_RAYS = 10;
+const PEONY_RAYS_HARD = 12;
+const PEONY_RING_INTERVAL_MS = 170;
+const PEONY_SPEED = 105;
+const PEONY_ANGULAR_VELOCITY = 0.42; // rad/s, sign alternates per ring
+const PEONY_CURVE_DURATION_MS = 1800;
+const PEONY_RING_OFFSET_RAD = Phaser.Math.DegToRad(7.5);
+
+// Scarlet Clock — delayed, snapshot-aimed constellation ('delayed' motion mode).
+// Bullet count is derived per ring from its radius (see clockSkill) so every
+// ring keeps roughly constant arc-length spacing — outer rings used to reuse the
+// inner ring's fixed count and came out visibly sparse/lopsided.
+const CLOCK_ARC_SPACING = 26; // target px between adjacent bullets on any ring
+const CLOCK_MAX_RING_BULLETS = 72; // per-ring cap (multiple of CLOCK_GROUPS) so huge procedural rings can't explode
+const CLOCK_GROUPS = 6; // staggered release parts per ring; bullets are interleaved across parts (not contiguous arcs)
+const CLOCK_LOCK_MS = 900;
+const CLOCK_GROUP_INTERVAL_MS = 140;
+const CLOCK_LAUNCH_SPEED = 190;
+const CLOCK_GROUP_ROTATION_RAD = Phaser.Math.DegToRad(5);
+const CLOCK_RADIUS = 70; // innermost ring; each ring further out adds CLOCK_LAYER_RADIUS_STEP
+const CLOCK_LAYER_RADIUS_STEP = 45;
+const CLOCK_LAYERS = 3;
+const CLOCK_LAYERS_HARD = 5;
+const CLOCK_LAYERS_MAX = 8; // hard cap regardless of how far past tier 10 a procedural boss goes
+// Outer ring locks and fires first ("outer arc lights up"), each ring further
+// in follows this many ms later — the spec's three-beat countdown, generalized.
+const CLOCK_LAYER_STAGGER_MS = 260;
+const CLOCK_RESNAPSHOT_GROUPS = 2; // hard: re-aim the innermost ring's last N groups at a later snapshot
+
+// Moonlit Lattice — telegraphed vertical bullet-wall curtains ('delayed' motion
+// mode) that sweep horizontally across the field. Walls span (near) full height
+// so they cover the player's low zone, and start at alternating edges so their
+// sweep direction reads from where they form.
+const LATTICE_MARGIN = 40;
+const LATTICE_GRID_TOP = 100; // top of each wall; bottom mirrors this as H - LATTICE_GRID_TOP
+const LATTICE_LINES_HARD_EXTRA = 1; // hard mode appends one more wall to the sequence
+const LATTICE_TELEGRAPH_MS = 750;
+const LATTICE_TELEGRAPH_MS_HARD = 450;
+const LATTICE_ARM_AT_MS = 600; // armed anchors brighten this long before launch
+const LATTICE_LINE_GAP_MS = 260;
+const LATTICE_BULLET_SPEED = 150;
+const LATTICE_ARMED_ALPHA = 0.9;
+// A wall is filled with bullets at ~this spacing (px) along its length so it
+// reads as a solid curtain instead of a handful of dodgeable dots; the safe gate
+// is a contiguous run of this many bullets, omitted per wall.
+const LATTICE_BULLET_SPACING = 26;
+const LATTICE_GAP_BULLETS = 3;
+
+// Butterfly Requiem — mirrored fans that decelerate, pause, then reverse ('decelPauseReverse').
+const BUTTERFLY_FAN_BULLETS = 11; // per wing, per volley
+const BUTTERFLY_VOLLEYS = 4;
+const BUTTERFLY_VOLLEYS_HARD = 6;
+const BUTTERFLY_VOLLEY_INTERVAL_MS = 260;
+const BUTTERFLY_INITIAL_SPEED = 150;
+const BUTTERFLY_DECELERATION = -95;
+const BUTTERFLY_MIN_SPEED = 12;
+const BUTTERFLY_PAUSE_MS = 350;
+const BUTTERFLY_REVERSE_SPEED = 115;
+const BUTTERFLY_REVERSE_ROTATION_RAD = Phaser.Math.DegToRad(12);
+const BUTTERFLY_WING_SPREAD_RAD = Phaser.Math.DegToRad(70);
+const BUTTERFLY_WING_INNER_RAD = Phaser.Math.DegToRad(20);
+// Second, smaller wing fired after the first one closes, rotated for a fresh silhouette.
+const BUTTERFLY_WING2_ROTATION_RAD = Phaser.Math.DegToRad(18);
+const BUTTERFLY_WING2_BULLETS = 6;
+const BUTTERFLY_PAUSE_SHOT_SPEED = 260; // hard-only sparse straight shots fired during the pause
+
+// Prism Loom — sweeping beams + petal crossfire. Beams have no Arcade Physics
+// primitive, so they're tracked/collided by hand — see activeBeams/update().
+const PRISM_BEAM_COUNT = 3;
+const PRISM_BEAM_COUNT_HARD = 4;
+const PRISM_TELEGRAPH_MS = 800;
+const PRISM_SWEEP_DURATION_MS = 2200;
+const PRISM_SWEEP_ARC_RAD = Phaser.Math.DegToRad(35);
+const PRISM_BEAM_WIDTH = 6; // visual thickness
+const PRISM_COLLISION_WIDTH = 10; // hit-test thickness (slightly wider than the visual core)
+const PRISM_BEAM_REACH = Math.hypot(W, H); // always reaches past any screen edge
+const PRISM_PETAL_INTERVAL_MS = 240;
+const PRISM_PETAL_SPEED = 92;
+const PRISM_PETAL_SPREAD_RAD = Phaser.Math.DegToRad(14);
+const PRISM_RECOVERY_MS = 900;
+
+type SkillId = 'cone' | 'radial' | 'burst' | 'aimed' | 'peony' | 'clock' | 'lattice' | 'butterfly' | 'prism';
+
+interface SkillCtx {
+  texAim: string;
+  texA: string;
+  texB: string;
+  hardIds: ReadonlySet<SkillId>;
+}
+
+interface TierRoster {
+  base: SkillId[]; // phase 1-2 pool, and the only pool sub-bosses ever draw from
+  signature?: SkillId; // phase-3 unlock, full bosses only
+  hardIds?: SkillId[]; // which of base/signature run at hard tuning this tier
+  combo?: SkillId[]; // procedural-only: run concurrently in phase 3 instead of signature
+}
+
+// One new skill introduced per tier through tier 6, then "remix" tiers 7-9 reuse
+// skills at their own hard tuning, then tier 10 is a curated capstone (prism,
+// hard, as a single signature — no combo; combo is procedural-only, see below).
+const BOSS_TIERS: TierRoster[] = [
+  { base: ['cone', 'radial', 'burst'] },
+  { base: ['radial', 'burst', 'aimed'], signature: 'peony' },
+  { base: ['burst', 'aimed', 'peony'], signature: 'clock' },
+  { base: ['aimed', 'peony', 'clock'], signature: 'lattice' },
+  { base: ['peony', 'clock', 'lattice'], signature: 'butterfly' },
+  { base: ['clock', 'lattice', 'butterfly'], signature: 'prism' },
+  { base: ['radial', 'aimed', 'lattice'], signature: 'peony', hardIds: ['peony'] },
+  { base: ['burst', 'clock', 'butterfly'], signature: 'lattice', hardIds: ['lattice'] },
+  { base: ['peony', 'clock', 'prism'], signature: 'butterfly', hardIds: ['peony', 'clock', 'butterfly'] },
+  {
+    base: ['lattice', 'butterfly', 'clock'],
+    signature: 'prism',
+    hardIds: ['lattice', 'butterfly', 'clock', 'prism'],
+  },
+];
+
+const SUB_BOSS_HP_SCALE = 0.6;
+// Sub-boss previews its paired tier's own roster (not a hand-me-down of the
+// previous tier), minus its newest/hardest addition, and never a signature.
+function subBossRoster(tier: number): SkillId[] {
+  return BOSS_TIERS[tier - 1].base.slice(0, 2);
+}
+
+const ALL_SKILLS: SkillId[] = [
+  'cone',
+  'radial',
+  'burst',
+  'aimed',
+  'peony',
+  'clock',
+  'lattice',
+  'butterfly',
+  'prism',
+];
+const PROCEDURAL_COMBO_CHANCE = 0.25;
+
+// Tier 11+: sample from the full pool at hard tuning, with a chance of a
+// two-skill combo phase (the only place two skills ever run concurrently).
+function proceduralRoster(): TierRoster {
+  const shuffled = Phaser.Utils.Array.Shuffle(ALL_SKILLS.slice());
+  const [a, b, c, sig, second] = shuffled;
+  const combo = Phaser.Math.RND.frac() < PROCEDURAL_COMBO_CHANCE ? [sig, second] : undefined;
+  return { base: [a, b, c], signature: combo ? undefined : sig, hardIds: ALL_SKILLS, combo };
+}
+
+// Computed once per boss spawn and cached on its data — never re-rolled mid-fight.
+function bossRosterForTier(tier: number): TierRoster {
+  return tier <= BOSS_TIERS.length ? BOSS_TIERS[tier - 1] : proceduralRoster();
+}
+
+// Prism Loom's rotating beam hitbox — Arcade Physics has no beam primitive, so
+// this is hand-collided every frame in update() via Geom.Intersects.LineToCircle.
+interface BeamState {
+  rect: Phaser.GameObjects.Rectangle;
+  boss: Sprite;
+  collide: boolean;
+}
 
 /* ---------------------------------- audio ---------------------------------- */
 const BGM_VOLUME = 0.45;
@@ -152,6 +341,51 @@ function lineMultipliers(lines: number, extra: number): number[] {
 type State = 'ready' | 'playing' | 'dead';
 type Sprite = Phaser.Physics.Arcade.Sprite;
 
+/* --------------------------- bullet motion controller ---------------------------
+ * Optional per-bullet behavior applied after launch, driven from a per-frame
+ * update rather than tweens (so releasing a bullet back to the pool never has
+ * to hunt down and kill an attached tween — see releaseBullet/updateBulletMotion).
+ * A bullet with no 'motion' data just keeps the velocity it was launched with,
+ * i.e. today's behavior, unchanged.
+ */
+type MotionMode = 'curved' | 'accel' | 'decelPauseReverse' | 'delayed';
+// Shared telegraph look for every 'delayed' (ghost) bullet, regardless of which
+// skill spawned it — spawnEnemyBullet dims it, updateBulletMotion restores it on launch.
+const GHOST_ALPHA = 0.25;
+
+interface MotionState {
+  mode: MotionMode;
+  stageStartedAt: number; // this.time.now when the current stage began
+
+  // curved: rotates the velocity vector by angularVelocityRad/s for curveDurationMs, then goes linear
+  angularVelocityRad?: number;
+  curveDurationMs?: number;
+
+  // accel: adjusts speed along the current heading by acceleration px/s^2, clamped
+  acceleration?: number;
+  minSpeed?: number;
+  maxSpeed?: number;
+
+  // decelPauseReverse: decelerate to minSpeed, hold for pauseMs, then launch once
+  // along the heading mirrored across the vertical axis (+ rotated) — keeps
+  // advancing the same direction it was heading, just crossing over, rather
+  // than a full 180° reverse back the way it came. `stage` tracks progress;
+  // `headingRad` is internal bookkeeping (the heading is lost once velocity hits zero).
+  stage?: 'decel' | 'pause';
+  headingRad?: number;
+  pauseMs?: number;
+  reverseSpeed?: number;
+  reverseRotationRad?: number;
+  reverseTex?: string; // swap to a brighter texture the moment reversal launches
+
+  // delayed: body spawns disabled (renders if visible, but can't collide — see
+  // Body.enable filtering in spawnEnemyBullet/releaseBullet) until launchAtMs,
+  // then fires once along launchAngleRad at launchSpeed.
+  launchAtMs?: number;
+  launchAngleRad?: number;
+  launchSpeed?: number;
+}
+
 class BulletHellScene extends Phaser.Scene {
   private state: State = 'ready';
   private ship!: Sprite;
@@ -179,6 +413,8 @@ class BulletHellScene extends Phaser.Scene {
   private bossLabel?: Phaser.GameObjects.Text;
   private borderFlash!: Phaser.GameObjects.Rectangle;
   private target = new Phaser.Math.Vector2(W / 2, H * 0.8);
+  private activeBeams: BeamState[] = [];
+  private skillTestOnce: SkillId | null = null; // ?skilltest=<id> dev hook
 
   constructor(private readonly gh: GameHubClient) {
     super('bullet-hell');
@@ -383,12 +619,20 @@ class BulletHellScene extends Phaser.Scene {
     this.time.addEvent({ delay: PLAYER_FIRE_MS, loop: true, callback: () => this.firePlayer() });
     this.time.addEvent({ delay: 1000, loop: true, callback: () => this.tickScore() });
 
-    // Dev helpers: ?wave=5 starts at that wave, ?p1=10&p2=7 pre-loads power-ups.
+    // Dev helpers: ?wave=5 starts at that wave, ?p1=10&p2=7 pre-loads power-ups,
+    // ?motiontest=1 fires one bullet per motion mode above the ship to eyeball them,
+    // ?skilltest=<id> forces the boss's very first move to be that skill (e.g.
+    // ?wave=10&skilltest=peony previews any of the 9 skill ids against a real boss).
     const params = new URLSearchParams(location.search);
     this.type1 = Math.max(0, Number(params.get('p1')) || 0);
     this.type2 = Math.max(0, Number(params.get('p2')) || 0);
     this.updatePowerText();
     this.startWave(Math.max(1, Number(params.get('wave')) || 1));
+    if (params.get('motiontest')) this.time.delayedCall(400, () => this.motionTest());
+    const skillTest = params.get('skilltest');
+    if (skillTest && (ALL_SKILLS as string[]).includes(skillTest)) {
+      this.skillTestOnce = skillTest as SkillId;
+    }
   }
 
   /* --------------------------------- waves --------------------------------- */
@@ -401,10 +645,12 @@ class BulletHellScene extends Phaser.Scene {
     this.waveText.setText(`WAVE ${n}`);
 
     const isBoss = n % WAVES_PER_CYCLE === 0;
-    const level = Math.floor((n - 1) / WAVES_PER_CYCLE) + 1;
+    const isSubBoss = isBoss && n % TIER_WAVES !== 0;
+    const tier = waveTier(n);
 
+    const bannerText = isSubBoss ? `WAVE ${n}\nSUB-BOSS` : isBoss ? `WAVE ${n}\nBOSS` : `WAVE ${n}`;
     const banner = this.add
-      .text(W / 2, H * 0.4, isBoss ? `WAVE ${n}\nBOSS` : `WAVE ${n}`, {
+      .text(W / 2, H * 0.4, bannerText, {
         fontFamily: 'monospace',
         fontSize: '44px',
         color: isBoss ? '#ff5d8f' : '#ffffff',
@@ -425,13 +671,13 @@ class BulletHellScene extends Phaser.Scene {
     this.time.delayedCall(WAVE_BANNER_MS, () => {
       if (this.state !== 'playing') return;
       if (isBoss) {
-        this.spawnBoss(level);
+        this.spawnBoss(tier, isSubBoss);
         this.spawningWave = false;
         return;
       }
       const count = ((n - 1) % WAVES_PER_CYCLE) + 1;
       for (let i = 0; i < count; i++) {
-        this.time.delayedCall(i * 250, () => this.spawnEnemy(level, i, count));
+        this.time.delayedCall(i * 250, () => this.spawnEnemy(tier, i, count));
       }
       this.time.delayedCall(count * 250 + 50, () => {
         this.spawningWave = false;
@@ -576,7 +822,9 @@ class BulletHellScene extends Phaser.Scene {
     done: () => void,
   ) {
     if (!src.active || this.state !== 'playing') return;
-    const waves = burstWaves(src.getData('level') as number, src.getData('boss') as boolean);
+    // Mobs store their difficulty as 'level'; bosses (sub or full) store 'tier' instead.
+    const difficulty = (src.getData('level') ?? src.getData('tier')) as number;
+    const waves = burstWaves(difficulty, src.getData('boss') as boolean);
     (src.getData('drift') as Phaser.Tweens.Tween | undefined)?.pause();
     const charge = this.tweens.add({ targets: src, scale: 1.12, yoyo: true, repeat: -1, duration: 140 });
     this.time.delayedCall(
@@ -602,30 +850,175 @@ class BulletHellScene extends Phaser.Scene {
     );
   }
 
-  private spawnEnemyBullet(x: number, y: number, angle: number, speed: number, tex: string) {
+  private spawnEnemyBullet(
+    x: number,
+    y: number,
+    angle: number,
+    speed: number,
+    tex: string,
+    motion?: Omit<MotionState, 'stageStartedAt'>,
+  ): Sprite | null {
     const bullet = this.enemyBullets.get(x, y, tex) as Sprite | null;
-    if (!bullet) return;
+    if (!bullet) return null;
     bullet.setActive(true).setVisible(true).setTexture(tex);
     bullet.body!.reset(x, y);
-    bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-    (bullet.body as Phaser.Physics.Arcade.Body).setCircle(5);
+    const body = bullet.body as Phaser.Physics.Arcade.Body;
+    body.setCircle(5);
+    if (motion?.mode === 'delayed') {
+      // Stays disabled (renders if visible, can't collide) until updateBulletMotion launches it.
+      body.enable = false;
+      bullet.setVelocity(0, 0);
+      bullet.setAlpha(GHOST_ALPHA);
+    } else {
+      body.enable = true;
+      bullet.setAlpha(1); // reset in case this pooled bullet was previously dimmed as a ghost
+      bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    }
+    bullet.setData('motion', motion ? { ...motion, stageStartedAt: this.time.now } : undefined);
+    return bullet;
+  }
+
+  // Deactivates a bullet and returns it to its group's pool instead of destroying
+  // it — Group.get() only reuses members it can still find (see Phaser's Group,
+  // which fully evicts anything that calls .destroy()), so recycling must go
+  // through this instead of bullet.destroy().
+  private releaseBullet(bullet: Sprite) {
+    bullet.setActive(false).setVisible(false);
+    (bullet.body as Phaser.Physics.Arcade.Body).enable = false;
+    bullet.setData('motion', undefined);
+  }
+
+  // Advances a bullet's optional per-frame motion behavior. Bullets with no
+  // 'motion' data (every existing move) skip out immediately — unchanged behavior.
+  private updateBulletMotion(bullet: Sprite, nowMs: number, dtMs: number) {
+    const motion = bullet.getData('motion') as MotionState | undefined;
+    if (!motion) return;
+    const body = bullet.body as Phaser.Physics.Arcade.Body;
+    const dt = dtMs / 1000;
+
+    if (motion.mode === 'delayed') {
+      if (nowMs < (motion.launchAtMs ?? 0)) return;
+      body.enable = true;
+      bullet.setAlpha(1); // was dimmed as a ghost telegraph — see spawnEnemyBullet
+      const speed = motion.launchSpeed ?? 0;
+      const angle = motion.launchAngleRad ?? 0;
+      bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+      bullet.setData('motion', undefined);
+      return;
+    }
+
+    if (motion.mode === 'curved') {
+      if (nowMs - motion.stageStartedAt >= (motion.curveDurationMs ?? 0)) {
+        bullet.setData('motion', undefined);
+        return;
+      }
+      Phaser.Math.Rotate(body.velocity, (motion.angularVelocityRad ?? 0) * dt);
+      return;
+    }
+
+    if (motion.mode === 'accel') {
+      const heading = body.velocity.angle();
+      const nextSpeed = Phaser.Math.Clamp(
+        body.velocity.length() + (motion.acceleration ?? 0) * dt,
+        motion.minSpeed ?? 0,
+        motion.maxSpeed ?? Number.POSITIVE_INFINITY,
+      );
+      bullet.setVelocity(Math.cos(heading) * nextSpeed, Math.sin(heading) * nextSpeed);
+      return;
+    }
+
+    // decelPauseReverse
+    if ((motion.stage ?? 'decel') === 'decel') {
+      const heading = body.velocity.angle();
+      const nextSpeed = Math.max(0, body.velocity.length() + (motion.acceleration ?? 0) * dt);
+      bullet.setVelocity(Math.cos(heading) * nextSpeed, Math.sin(heading) * nextSpeed);
+      if (nextSpeed <= (motion.minSpeed ?? 0)) {
+        bullet.setVelocity(0, 0);
+        motion.stage = 'pause';
+        motion.headingRad = heading;
+        motion.stageStartedAt = nowMs;
+      }
+      bullet.setData('motion', motion);
+      return;
+    }
+    // stage === 'pause'
+    if (nowMs - motion.stageStartedAt < (motion.pauseMs ?? 0)) return;
+    // Mirror across the vertical axis (negate the x-component, keep y) rather
+    // than a full 180° reverse: a full reverse sends the bullet back the way
+    // it came, i.e. up past the boss and away from the player. Mirroring keeps
+    // it advancing in the same downward direction while crossing over toward
+    // (and past) center, which is what actually threatens the player.
+    const reverseHeading = Math.PI - (motion.headingRad ?? 0) + (motion.reverseRotationRad ?? 0);
+    const reverseSpeed = motion.reverseSpeed ?? 0;
+    bullet.setVelocity(Math.cos(reverseHeading) * reverseSpeed, Math.sin(reverseHeading) * reverseSpeed);
+    if (motion.reverseTex) bullet.setTexture(motion.reverseTex); // brighter color once it folds back in
+    // Reversal is a one-shot launch — nothing more to do per-frame after this.
+    bullet.setData('motion', undefined);
+  }
+
+  // Dev-only smoke test for the motion controller (?motiontest=1): fires one
+  // bullet per mode above the ship so each can be eyeballed in isolation before
+  // a real skill is built on top of it. Not part of any actual boss move.
+  private motionTest() {
+    const x = this.ship.x;
+    const y = this.ship.y - 200;
+    this.spawnEnemyBullet(x - 90, y, -Math.PI / 2, 120, 'ebullet', {
+      mode: 'curved',
+      angularVelocityRad: 1.2,
+      curveDurationMs: 1500,
+    });
+    this.spawnEnemyBullet(x - 30, y, -Math.PI / 2, 40, 'ebullet', {
+      mode: 'accel',
+      acceleration: 80,
+      maxSpeed: 260,
+    });
+    this.spawnEnemyBullet(x + 30, y, -Math.PI / 2, 150, 'ebullet', {
+      mode: 'decelPauseReverse',
+      acceleration: -120,
+      minSpeed: 5,
+      pauseMs: 500,
+      reverseSpeed: 150,
+      reverseRotationRad: 0,
+    });
+    this.spawnEnemyBullet(x + 90, y, 0, 0, 'ebullet', {
+      mode: 'delayed',
+      launchAtMs: this.time.now + 1200,
+      launchAngleRad: Math.PI / 2,
+      launchSpeed: 150,
+    });
   }
 
   /* ---------------------------------- boss ---------------------------------- */
 
-  private spawnBoss(level: number) {
-    const hp = BOSS_BASE_HP + BOSS_HP_PER_LEVEL * (level - 1);
+  private spawnBoss(tier: number, isSubBoss: boolean) {
+    const hp =
+      (BOSS_BASE_HP + BOSS_HP_PER_LEVEL * (tier - 1)) * (isSubBoss ? SUB_BOSS_HP_SCALE : 1);
     const boss = this.enemies.create(W / 2, -60, 'boss') as Sprite;
     boss.setCircle(24, 4, 4);
     boss.setDepth(2);
-    const tint = BOSS_TINTS[(level - 1) % BOSS_TINTS.length];
+    // Sub-bosses share their paired boss's tint/palette (both key off the
+    // same tier) so they read as a preview of what's coming, not a reskin.
+    const tint = BOSS_TINTS[(tier - 1) % BOSS_TINTS.length];
     boss.setTint(tint);
-    boss.setData({ hp, maxHp: hp, level, boss: true, tint });
+    boss.setData({
+      hp,
+      maxHp: hp,
+      tier,
+      boss: true,
+      isSubBoss,
+      tint,
+      phase: 1 as BossPhase,
+      roster: bossRosterForTier(tier), // computed once, never re-rolled mid-fight
+    });
     this.boss = boss;
 
     const barW = W - 160;
     this.bossLabel = this.add
-      .text(W / 2, 46, `BOSS Lv.${level}`, { fontFamily: 'monospace', fontSize: '14px', color: '#ff8fa8' })
+      .text(W / 2, 46, `${isSubBoss ? 'SUB-BOSS' : 'BOSS'} Lv.${tier}`, {
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        color: '#ff8fa8',
+      })
       .setOrigin(0.5)
       .setDepth(10);
     this.bossBarBg = this.add
@@ -649,51 +1042,85 @@ class BulletHellScene extends Phaser.Scene {
         const glide = this.tweens.add({
           targets: boss,
           x: 90,
-          duration: 1200,
+          duration: (Math.abs(90 - boss.x) / BOSS_MOVE_SPEED) * 1000,
           ease: 'Sine.easeInOut',
           onComplete: () => {
-            if (!boss.active) return;
-            const strafe = this.tweens.add({
-              targets: boss,
-              x: W - 90,
-              duration: 2400,
-              yoyo: true,
-              repeat: -1,
-              ease: 'Sine.easeInOut',
-            });
-            boss.setData('drift', strafe);
+            if (!boss.active || this.state !== 'playing') return;
+            // Start the side-to-side patrol, then begin attacking. Only start
+            // attacking once the strafe exists — starting earlier meant the first
+            // move's withStationaryBoss could fire while `drift` still held this
+            // one-shot entrance glide instead of the repeating patrol.
+            this.startStrafe(boss);
+            this.bossMoveLoop(boss);
           },
         });
         boss.setData('drift', glide);
-        this.bossMoveLoop(boss);
       },
     });
   }
 
-  // Boss moves never overlap: random move (≠ last) -> wait -> next move.
+  // Boss moves never overlap: pick from the roster (≠ last) -> wait -> next move,
+  // except a procedural combo phase, which is the one case >1 id runs at once.
   private bossMoveLoop(boss: Sprite) {
     if (!boss.active || this.state !== 'playing') return;
-    const palette = BOSS_PALETTES[((boss.getData('level') as number) - 1) % BOSS_PALETTES.length];
-    const texAim = this.bulletTexture(palette[0]);
-    const texA = this.bulletTexture(palette[1]);
-    const texB = this.bulletTexture(palette[2]);
-    const last = boss.getData('lastMove') as string | undefined;
-    const move = Phaser.Math.RND.pick(['radial', 'burst', 'aimed', 'cone'].filter((m) => m !== last));
-    boss.setData('lastMove', move);
+    const tier = boss.getData('tier') as number;
+    const isSubBoss = boss.getData('isSubBoss') as boolean;
+    const roster = boss.getData('roster') as TierRoster;
+
+    // Moves are fully sequential (this is the only place a new one is picked),
+    // so this is the one safe point to re-check phase — it can never land mid-pattern.
+    // Sub-bosses never escalate: they stay phase 1 for the whole fight.
+    let phase: BossPhase = 1;
+    if (!isSubBoss) {
+      const hpRatio = (boss.getData('hp') as number) / (boss.getData('maxHp') as number);
+      phase = bossPhase(hpRatio);
+      if (phase !== (boss.getData('phase') as BossPhase)) {
+        boss.setData('phase', phase);
+        this.onBossPhaseChange(boss, phase);
+      }
+    }
+
+    const palette = BOSS_PALETTES[(tier - 1) % BOSS_PALETTES.length];
+    const ctx: SkillCtx = {
+      texAim: this.bulletTexture(palette[0]),
+      texA: this.bulletTexture(palette[1]),
+      texB: this.bulletTexture(palette[2]),
+      hardIds: new Set(isSubBoss ? [] : (roster.hardIds ?? [])),
+    };
+
     const next = () => {
       if (!boss.active || this.state !== 'playing') return;
       this.time.delayedCall(BOSS_SKILL_GAP_MS, () => this.bossMoveLoop(boss));
     };
-    if (move === 'radial') {
-      this.movingRadial(boss, BOSS_MOVING_VOLLEYS, BOSS_RADIAL_SPEED, texA, texB, next);
-    } else if (move === 'burst') {
-      this.burstRadial(boss, BOSS_ROTATE_STEPS, BOSS_RADIAL_SPEED * BURST_SPEED_FACTOR, texA, texB, next);
-    } else if (move === 'aimed') {
-      this.aimedStream(boss, texAim, next);
-    } else {
-      this.coneAttack(boss, BOSS_CONE_LINES, texAim);
-      next();
+
+    if (this.skillTestOnce) {
+      const id = this.skillTestOnce;
+      this.skillTestOnce = null;
+      this.runSkills(boss, [id], ctx, next);
+      return;
     }
+
+    let ids: SkillId[];
+    if (!isSubBoss && phase === 3 && roster.combo) {
+      ids = roster.combo;
+    } else {
+      const pool = isSubBoss
+        ? subBossRoster(tier)
+        : phase < 3
+          ? roster.base
+          : [...roster.base, ...(roster.signature ? [roster.signature] : [])];
+      const last = boss.getData('lastMove') as string | undefined;
+      ids = [Phaser.Math.RND.pick(pool.filter((m) => m !== last))];
+    }
+    boss.setData('lastMove', ids[ids.length - 1]);
+    this.runSkills(boss, ids, ctx, next);
+  }
+
+  // Placeholder reaction to a phase change — just enough to see it happen.
+  // Real per-phase move pools/speed/visuals are a follow-up design, not this.
+  private onBossPhaseChange(boss: Sprite, phase: BossPhase) {
+    const tier = boss.getData('tier') as number;
+    this.bossLabel?.setText(`BOSS Lv.${tier} · P${phase}`);
   }
 
   // Straight-shot skill: a rapid stream aimed at the player's current position.
@@ -706,6 +1133,485 @@ class BulletHellScene extends Phaser.Scene {
       });
     }
     this.time.delayedCall(BOSS_AIMED_SHOTS * BOSS_AIMED_GAP_MS, done);
+  }
+
+  /* -------------------------- touhou boss skills -------------------------- */
+
+  // Dispatches one skill id to its implementation. cone/radial/burst/aimed reuse
+  // the existing (unchanged) methods above; the five new skills are written
+  // directly against the uniform (boss, ctx, done) shape below.
+  private runSkill(id: SkillId, boss: Sprite, ctx: SkillCtx, done: () => void) {
+    switch (id) {
+      case 'cone':
+        this.coneAttack(boss, BOSS_CONE_LINES, ctx.texAim);
+        done();
+        break;
+      case 'radial':
+        this.movingRadial(boss, BOSS_MOVING_VOLLEYS, BOSS_RADIAL_SPEED, ctx.texA, ctx.texB, done);
+        break;
+      case 'burst':
+        this.burstRadial(boss, BOSS_ROTATE_STEPS, BOSS_RADIAL_SPEED * BURST_SPEED_FACTOR, ctx.texA, ctx.texB, done);
+        break;
+      case 'aimed':
+        this.aimedStream(boss, ctx.texAim, done);
+        break;
+      case 'peony':
+        this.peonySkill(boss, ctx, done);
+        break;
+      case 'clock':
+        this.clockSkill(boss, ctx, done);
+        break;
+      case 'lattice':
+        this.latticeSkill(boss, ctx, done);
+        break;
+      case 'butterfly':
+        this.butterflySkill(boss, ctx, done);
+        break;
+      case 'prism':
+        this.prismSkill(boss, ctx, done);
+        break;
+    }
+  }
+
+  // Runs one or more skill ids; `done` fires once every id in the batch has
+  // finished. Concurrent batches (>1 id) only ever happen in a procedural
+  // combo phase — every curated tier always passes a single id.
+  private runSkills(boss: Sprite, ids: SkillId[], ctx: SkillCtx, done: () => void) {
+    let remaining = ids.length;
+    for (const id of ids) {
+      this.runSkill(id, boss, ctx, () => {
+        remaining -= 1;
+        if (remaining === 0) done();
+      });
+    }
+  }
+
+  // Side-to-side patrol as a self-scheduling chain of single-leg tweens (rather
+  // than one yoyo/repeat tween). Each leg heads for the far edge at cruising
+  // speed and, on arrival, schedules the next — so the strafe can always be
+  // restarted cleanly from wherever the boss currently is (after a skill
+  // repositions it), with no stored tween progress to snap back to.
+  private startStrafe(boss: Sprite) {
+    boss.setData('statHold', 0);
+    boss.setData('statReady', false);
+    const step = () => {
+      if (!boss.active || this.state !== 'playing') return;
+      const target = boss.x < W / 2 ? W - 90 : 90; // always patrol toward the far edge
+      const duration = Math.max(BOSS_MOVE_MIN_MS, (Math.abs(target - boss.x) / BOSS_MOVE_SPEED) * 1000);
+      const leg = this.tweens.add({ targets: boss, x: target, duration, ease: 'Sine.easeInOut', onComplete: step });
+      boss.setData('drift', leg);
+    };
+    step();
+  }
+
+  // Peony/Lattice/Butterfly/Prism all want the boss to stop drifting and settle
+  // at a fixed spot before firing — otherwise every ring/line/wing/beam fires
+  // from a slightly different position as the strafe keeps moving, smearing an
+  // otherwise-symmetric pattern sideways instead of blooming from one point.
+  //
+  // The strafe is *stopped*, not paused: a paused strafe resumes from its stored
+  // progress, so the frame after resume it writes its old x and snaps the boss
+  // back from the anchor — the visible "boss suddenly snaps to a spot" glitch.
+  // Instead `finish` restarts a fresh patrol from wherever the boss ended up.
+  //
+  // A holder refcount makes a procedural combo phase (two stationary skills at
+  // once) safe: only the first repositions, later ones run from that same anchor
+  // once it settles, and the patrol restarts only after the last one finishes —
+  // so two skills can never leave two strafes fighting over boss.x.
+  private withStationaryBoss(boss: Sprite, anchorX: number, run: (finish: () => void) => void) {
+    const holders = ((boss.getData('statHold') as number) ?? 0) + 1;
+    boss.setData('statHold', holders);
+
+    const finish = () => {
+      const remaining = ((boss.getData('statHold') as number) ?? 1) - 1;
+      boss.setData('statHold', Math.max(0, remaining));
+      if (remaining <= 0 && boss.active && this.state === 'playing') this.startStrafe(boss);
+    };
+
+    if (holders > 1) {
+      // Concurrent (combo) skill — the first holder owns the reposition; run as
+      // soon as the boss has settled at the shared anchor (or immediately if so).
+      if (boss.getData('statReady')) run(finish);
+      else {
+        const queue = (boss.getData('statQueue') as Array<() => void>) ?? [];
+        queue.push(() => run(finish));
+        boss.setData('statQueue', queue);
+      }
+      return;
+    }
+
+    boss.setData('statReady', false);
+    boss.setData('statQueue', []);
+    const drift = boss.getData('drift') as Phaser.Tweens.Tween | undefined;
+    drift?.stop();
+    // Same cruising speed as the normal strafe, not a fixed duration — otherwise
+    // the reposition looks like a snap (too fast when far, sluggish when close).
+    const duration = Math.max(BOSS_MOVE_MIN_MS, (Math.abs(anchorX - boss.x) / BOSS_MOVE_SPEED) * 1000);
+    this.tweens.add({
+      targets: boss,
+      x: anchorX,
+      duration,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        if (!boss.active || this.state !== 'playing') return;
+        boss.setData('statReady', true);
+        run(finish);
+        const queue = (boss.getData('statQueue') as Array<() => void>) ?? [];
+        boss.setData('statQueue', []);
+        for (const queued of queue) queued();
+      },
+    });
+  }
+
+  // Celestial Peony — two interlocking spiral rings, alternating clockwise and
+  // counter-clockwise, built on the 'curved' motion mode.
+  private peonySkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('peony');
+    const rings = hard ? PEONY_RINGS_HARD : PEONY_RINGS;
+    const rays = hard ? PEONY_RAYS_HARD : PEONY_RAYS;
+    this.withStationaryBoss(boss, W / 2, (finish) => {
+      // Every ring fires from this same fixed (x, y) — that's what makes
+      // concentric, alternating-direction rings read as a woven flower instead
+      // of a comet smeared sideways by a still-drifting boss.
+      const originX = boss.x;
+      const originY = boss.y;
+      let ring = 0;
+      const fireRing = () => {
+        if (!boss.active || this.state !== 'playing') return;
+        const cw = ring % 2 === 0;
+        const tex = cw ? ctx.texA : ctx.texB;
+        const baseOffset = ring * PEONY_RING_OFFSET_RAD;
+        const gap = (Math.PI * 2) / rays;
+        for (let i = 0; i < rays; i++) {
+          this.spawnEnemyBullet(originX, originY, baseOffset + i * gap, PEONY_SPEED, tex, {
+            mode: 'curved',
+            angularVelocityRad: (cw ? 1 : -1) * PEONY_ANGULAR_VELOCITY,
+            curveDurationMs: PEONY_CURVE_DURATION_MS,
+          });
+        }
+        ring += 1;
+        if (ring < rings) this.time.delayedCall(PEONY_RING_INTERVAL_MS, fireRing);
+        else
+          this.time.delayedCall(700, () => {
+            finish();
+            done();
+          });
+      };
+      fireRing();
+    });
+  }
+
+  // Scarlet Clock — a ring of ghost bullets locks onto a snapshot of the
+  // player's position, then releases in staggered, rotating waves. Built on
+  // the 'delayed' motion mode: while locked the bullets render but can't
+  // collide (body.enable stays false), which is exactly the telegraph this
+  // skill needs, for free.
+  private clockSkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('clock');
+    const tier = boss.getData('tier') as number;
+    // 3 rings by default, 5 on hard, and one more per tier past the curated
+    // table (procedural bosses), capped so it never runs away.
+    const layers = Math.min(
+      CLOCK_LAYERS_MAX,
+      (hard ? CLOCK_LAYERS_HARD : CLOCK_LAYERS) + Math.max(0, tier - BOSS_TIERS.length),
+    );
+    const cycleMs = CLOCK_LOCK_MS + CLOCK_GROUPS * CLOCK_GROUP_INTERVAL_MS;
+
+    this.withStationaryBoss(boss, W / 2, (finish) => {
+      // All rings share this fixed center, so time-staggered layers still read
+      // as genuinely concentric instead of drifting apart as the boss strafes.
+      const centerX = boss.x;
+      const centerY = boss.y;
+
+      const spawnLayer = (layer: number) => {
+        if (!boss.active || this.state !== 'playing') return;
+        // Layer 0 is the outermost ring and locks/fires first; each ring further
+        // in follows a beat later — the spec's "outer, then middle, then inner" countdown.
+        const radius = CLOCK_RADIUS + (layers - 1 - layer) * CLOCK_LAYER_RADIUS_STEP;
+        // Count scales with this ring's radius (rounded to a whole number of
+        // groups) so every ring holds roughly constant arc-length spacing.
+        const count = Phaser.Math.Clamp(
+          Math.round((2 * Math.PI * radius) / CLOCK_ARC_SPACING / CLOCK_GROUPS) * CLOCK_GROUPS,
+          CLOCK_GROUPS,
+          CLOCK_MAX_RING_BULLETS,
+        );
+        const gap = (Math.PI * 2) / count;
+        const target = new Phaser.Math.Vector2(this.ship.x, this.ship.y);
+        const now = this.time.now;
+        const resnapshotBullets: Sprite[] = [];
+        for (let i = 0; i < count; i++) {
+          // Interleave: each of the CLOCK_GROUPS release beats is a rotationally
+          // symmetric subset spread around the whole ring, not a contiguous arc,
+          // so every beat stays balanced instead of firing one lopsided wedge.
+          const group = i % CLOCK_GROUPS;
+          const spawnAngle = i * gap;
+          const x = centerX + Math.cos(spawnAngle) * radius;
+          const y = centerY + Math.sin(spawnAngle) * radius;
+          const launchAtMs = now + CLOCK_LOCK_MS + group * CLOCK_GROUP_INTERVAL_MS;
+          const launchAngleRad =
+            Phaser.Math.Angle.Between(x, y, target.x, target.y) + group * CLOCK_GROUP_ROTATION_RAD;
+          const bullet = this.spawnEnemyBullet(x, y, 0, 0, ctx.texAim, {
+            mode: 'delayed',
+            launchAtMs,
+            launchAngleRad,
+            launchSpeed: CLOCK_LAUNCH_SPEED,
+          });
+          if (hard && layer === layers - 1 && bullet && group >= CLOCK_GROUPS - CLOCK_RESNAPSHOT_GROUPS) {
+            resnapshotBullets.push(bullet);
+          }
+        }
+        if (resnapshotBullets.length) {
+          // Re-aim the innermost ring's last groups at a second, later snapshot shortly before they launch.
+          this.time.delayedCall(CLOCK_LOCK_MS - CLOCK_GROUP_INTERVAL_MS, () => {
+            if (this.state !== 'playing') return;
+            const target2 = new Phaser.Math.Vector2(this.ship.x, this.ship.y);
+            for (const b of resnapshotBullets) {
+              const motion = b.active && b.getData('motion');
+              if (motion) motion.launchAngleRad = Phaser.Math.Angle.Between(b.x, b.y, target2.x, target2.y);
+            }
+          });
+        }
+      };
+
+      for (let layer = 0; layer < layers; layer++) {
+        this.time.delayedCall(layer * CLOCK_LAYER_STAGGER_MS, () => spawnLayer(layer));
+      }
+      this.time.delayedCall((layers - 1) * CLOCK_LAYER_STAGGER_MS + cycleMs + 400, () => {
+        finish();
+        done();
+      });
+    });
+  }
+
+  // Moonlit Lattice — a sequence of vertical bullet-wall curtains that sweep
+  // horizontally across the field. Each wall is a (near) full-height column of
+  // ghost bullets ('delayed' motion) telegraphed in place, then launched sideways
+  // in unison, with a contiguous gap carved out as the safe lane. Walls start at
+  // alternating edges so their sweep direction reads from where they form.
+  private latticeSkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('lattice');
+    const telegraphMs = hard ? LATTICE_TELEGRAPH_MS_HARD : LATTICE_TELEGRAPH_MS;
+    const top = LATTICE_GRID_TOP;
+    const bottom = H - LATTICE_GRID_TOP; // full-height curtain, covering the player's low zone
+    const mid = (top + bottom) / 2;
+    const leftX = LATTICE_MARGIN;
+    const rightX = W - LATTICE_MARGIN;
+    const colLine = (x: number, y0 = top, y1 = bottom) => [
+      { x, y: y0 },
+      { x, y: y1 },
+    ];
+
+    // Fills a polyline into a solid row of bullets at ~constant spacing along its
+    // length (regardless of segment length), so a tall vertical column comes out
+    // as dense as any other wall — that's the "row of bullets" wall, not dots.
+    const densify = (pts: { x: number; y: number }[]) => {
+      const out: { x: number; y: number }[] = [];
+      for (let s = 0; s < pts.length - 1; s++) {
+        const a = pts[s];
+        const b = pts[s + 1];
+        const steps = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / LATTICE_BULLET_SPACING));
+        const emitTo = s === pts.length - 2 ? steps : steps - 1; // final endpoint exactly once
+        for (let k = 0; k <= emitTo; k++) {
+          const t = k / steps;
+          out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+        }
+      }
+      return out;
+    };
+
+    // Each wall is one or more vertical strokes swept horizontally. `dir` +1
+    // sweeps right (wall forms at the left edge), -1 sweeps left (right edge).
+    // `safeGap` walls carve one gate; the center-split finale instead uses two
+    // half-columns with a real structural gap band across the middle.
+    const splitHalf = 70;
+    type Line = { strokes: { x: number; y: number }[][]; dir: 1 | -1; safeGap: boolean };
+    const lines: Line[] = [
+      { strokes: [colLine(leftX)], dir: 1, safeGap: true },
+      { strokes: [colLine(rightX)], dir: -1, safeGap: true },
+      { strokes: [colLine(leftX)], dir: 1, safeGap: true },
+      { strokes: [colLine(rightX)], dir: -1, safeGap: true },
+      {
+        strokes: [colLine(leftX, top, mid - splitHalf), colLine(leftX, mid + splitHalf, bottom)],
+        dir: 1,
+        safeGap: false,
+      },
+    ];
+    for (let e = 0; e < (hard ? LATTICE_LINES_HARD_EXTRA : 0); e++) {
+      lines.push({ strokes: [colLine(rightX)], dir: -1, safeGap: true });
+    }
+
+    this.withStationaryBoss(boss, W / 2, (finish) => {
+      let index = 0;
+      const fireLine = () => {
+        if (!boss.active || this.state !== 'playing') return;
+        const line = lines[index];
+        const launchAtMs = this.time.now + telegraphMs;
+        const launchAngleRad = line.dir > 0 ? 0 : Math.PI; // sweep right (0) or left (π)
+        const armed: Sprite[] = [];
+        for (const stroke of line.strokes) {
+          const pts = densify(stroke);
+          // Carve a contiguous safe gate out of the wall (skip a run of bullets)
+          // at a random interior position — the deliberate lane to dodge through.
+          let gapStart = -1;
+          let gapEnd = -1;
+          if (line.safeGap && pts.length > LATTICE_GAP_BULLETS + 2) {
+            const half = Math.floor(LATTICE_GAP_BULLETS / 2);
+            const center = Phaser.Math.Between(half + 1, pts.length - half - 2);
+            gapStart = center - half;
+            gapEnd = center + half;
+          }
+          pts.forEach((p, i) => {
+            if (i >= gapStart && i <= gapEnd) return;
+            const bullet = this.spawnEnemyBullet(p.x, p.y, 0, 0, ctx.texA, {
+              mode: 'delayed',
+              launchAtMs,
+              launchAngleRad,
+              launchSpeed: LATTICE_BULLET_SPEED,
+            });
+            if (bullet) armed.push(bullet);
+          });
+        }
+        // Armed anchors brighten shortly before they launch — the readable
+        // "this is about to fire" cue the spec calls for.
+        this.time.delayedCall(Math.max(0, telegraphMs - LATTICE_ARM_AT_MS), () => {
+          for (const b of armed) if (b.active) b.setAlpha(LATTICE_ARMED_ALPHA);
+        });
+        index += 1;
+        if (index < lines.length) this.time.delayedCall(telegraphMs + LATTICE_LINE_GAP_MS, fireLine);
+        else
+          this.time.delayedCall(telegraphMs + 500, () => {
+            finish();
+            done();
+          });
+      };
+      fireLine();
+    });
+  }
+
+  // Butterfly Requiem — mirrored wing fans that drift outward, decelerate to a
+  // hover, pause, then fold back inward at a rotated angle. Built entirely on
+  // the 'decelPauseReverse' motion mode; opposite reverseRotationRad per wing
+  // gives the two sides opposite handedness on the reversal.
+  private butterflySkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('butterfly');
+    const volleys = hard ? BUTTERFLY_VOLLEYS_HARD : BUTTERFLY_VOLLEYS;
+    const reverseTex = ctx.texAim; // brighter color once the wings fold back in
+
+    this.withStationaryBoss(boss, W / 2, (finish) => {
+      const fireWing = (bullets: number, extraRotationRad: number) => {
+        for (const wing of [-1, 1]) {
+          for (let i = 0; i < bullets; i++) {
+            const spread = bullets > 1 ? (i / (bullets - 1)) * BUTTERFLY_WING_SPREAD_RAD : 0;
+            const angle = Math.PI / 2 + wing * (BUTTERFLY_WING_INNER_RAD + spread + extraRotationRad);
+            this.spawnEnemyBullet(boss.x, boss.y, angle, BUTTERFLY_INITIAL_SPEED, wing < 0 ? ctx.texA : ctx.texB, {
+              mode: 'decelPauseReverse',
+              acceleration: BUTTERFLY_DECELERATION,
+              minSpeed: BUTTERFLY_MIN_SPEED,
+              pauseMs: BUTTERFLY_PAUSE_MS,
+              reverseSpeed: BUTTERFLY_REVERSE_SPEED,
+              reverseRotationRad: wing * BUTTERFLY_REVERSE_ROTATION_RAD,
+              reverseTex,
+            });
+          }
+        }
+      };
+
+      // How long one bullet takes to decelerate to a hover — used to time both
+      // the hard-mode pause shots and when the first wing has "closed" (reversed).
+      const decelMs = (Math.abs(BUTTERFLY_INITIAL_SPEED - BUTTERFLY_MIN_SPEED) / Math.abs(BUTTERFLY_DECELERATION)) * 1000;
+      const oneWingDurationMs = decelMs + BUTTERFLY_PAUSE_MS;
+
+      let v = 0;
+      const fireVolley = () => {
+        if (!boss.active || this.state !== 'playing') return;
+        fireWing(BUTTERFLY_FAN_BULLETS, 0);
+        v += 1;
+        if (v < volleys) {
+          this.time.delayedCall(BUTTERFLY_VOLLEY_INTERVAL_MS, fireVolley);
+          return;
+        }
+        const lastVolleyAtMs = (volleys - 1) * BUTTERFLY_VOLLEY_INTERVAL_MS;
+        if (hard) {
+          // Sparse straight shots snuck in while the wings hover, mid-pause.
+          for (let s = 0; s < 3; s++) {
+            this.time.delayedCall(lastVolleyAtMs + decelMs + s * 120, () => {
+              if (!boss.active || this.state !== 'playing') return;
+              const angle = Phaser.Math.Angle.Between(boss.x, boss.y, this.ship.x, this.ship.y);
+              this.spawnEnemyBullet(boss.x, boss.y, angle, BUTTERFLY_PAUSE_SHOT_SPEED, ctx.texAim);
+            });
+          }
+        }
+        // Second, smaller wing after the first one closes (reverses), rotated
+        // for a distinct silhouette rather than a plain repeat.
+        this.time.delayedCall(lastVolleyAtMs + oneWingDurationMs, () => {
+          if (!boss.active || this.state !== 'playing') return;
+          fireWing(BUTTERFLY_WING2_BULLETS, BUTTERFLY_WING2_ROTATION_RAD);
+          this.time.delayedCall(oneWingDurationMs + 300, () => {
+            finish();
+            done();
+          });
+        });
+      };
+      fireVolley();
+    });
+  }
+
+  // Prism Loom — sweeping beams with slow petal crossfire underneath. Beams
+  // have no Arcade Physics primitive, so they're plain rotating Rectangles
+  // tracked in `activeBeams` and hand-collided every frame in update().
+  private prismSkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('prism');
+    const beamCount = hard ? PRISM_BEAM_COUNT_HARD : PRISM_BEAM_COUNT;
+    const startAngle = Math.PI / 2 - PRISM_SWEEP_ARC_RAD / 2;
+    const beamGap = beamCount > 1 ? (Math.PI * 2) / beamCount : 0;
+    // Spec: boss moves to one upper corner — pick whichever side it's already closer to.
+    const anchorX = boss.x < W / 2 ? 90 : W - 90;
+
+    this.withStationaryBoss(boss, anchorX, (finish) => {
+      for (let i = 0; i < beamCount; i++) {
+        const rect = this.add
+          .rectangle(boss.x, boss.y, PRISM_BEAM_REACH, PRISM_BEAM_WIDTH, hard ? 0xff8fa8 : 0xff4d6d)
+          .setOrigin(0, 0.5)
+          .setDepth(4)
+          .setAlpha(0.25)
+          .setRotation(startAngle + i * beamGap);
+        const beam: BeamState = { rect, boss, collide: false };
+        this.activeBeams.push(beam);
+        this.time.delayedCall(PRISM_TELEGRAPH_MS, () => {
+          if (!boss.active) return;
+          rect.setAlpha(0.85);
+          beam.collide = true;
+          // Hard mode: change sweep direction once instead of one continuous
+          // pass — same total duration, split into forward then back.
+          this.tweens.add({
+            targets: rect,
+            rotation: rect.rotation + PRISM_SWEEP_ARC_RAD,
+            duration: hard ? PRISM_SWEEP_DURATION_MS / 2 : PRISM_SWEEP_DURATION_MS,
+            yoyo: hard,
+          });
+        });
+      }
+
+      let petalElapsed = 0;
+      const firePetals = () => {
+        if (!boss.active || this.state !== 'playing') return;
+        const angle = Phaser.Math.Angle.Between(boss.x, boss.y, this.ship.x, this.ship.y);
+        this.spawnEnemyBullet(boss.x, boss.y, angle - PRISM_PETAL_SPREAD_RAD, PRISM_PETAL_SPEED, ctx.texA);
+        this.spawnEnemyBullet(boss.x, boss.y, angle + PRISM_PETAL_SPREAD_RAD, PRISM_PETAL_SPEED, ctx.texB);
+        petalElapsed += PRISM_PETAL_INTERVAL_MS;
+        if (petalElapsed < PRISM_TELEGRAPH_MS + PRISM_SWEEP_DURATION_MS) {
+          this.time.delayedCall(PRISM_PETAL_INTERVAL_MS, firePetals);
+        }
+      };
+      firePetals();
+
+      this.time.delayedCall(PRISM_TELEGRAPH_MS + PRISM_SWEEP_DURATION_MS, () => {
+        for (const beam of this.activeBeams) beam.rect.destroy();
+        this.activeBeams.length = 0;
+        finish();
+        this.time.delayedCall(PRISM_RECOVERY_MS, done);
+      });
+    });
   }
 
   private updateBossBar() {
@@ -745,6 +1651,7 @@ class BulletHellScene extends Phaser.Scene {
       if (!bullet) return;
       bullet.setActive(true).setVisible(true).setTexture(tex);
       bullet.body!.reset(x, y);
+      (bullet.body as Phaser.Physics.Arcade.Body).enable = true;
       bullet.setRotation(rad);
       bullet.setVelocity(Math.sin(rad) * PLAYER_BULLET_SPEED, -Math.cos(rad) * PLAYER_BULLET_SPEED);
       bullet.setData('dmg', dmgScale * mults[i]);
@@ -756,7 +1663,7 @@ class BulletHellScene extends Phaser.Scene {
   private onPlayerBulletHit(bullet: Sprite, enemy: Sprite) {
     if (!bullet.active || !enemy.active) return;
     const dmg = (bullet.getData('dmg') as number) ?? 1;
-    bullet.destroy();
+    this.releaseBullet(bullet);
     const hp = (enemy.getData('hp') as number) - dmg;
     enemy.setData('hp', hp);
     if (enemy.getData('boss')) this.updateBossBar();
@@ -788,10 +1695,12 @@ class BulletHellScene extends Phaser.Scene {
       this.sfx('success');
       this.boss = null;
       this.destroyBossBar();
-      // Reward: clear the screen of enemy bullets when the boss falls.
+      // Reward: clear the screen of enemy bullets (and any live Prism beams) when the boss falls.
       for (const b of this.enemyBullets.getChildren() as Sprite[]) {
-        if (b.active) b.destroy();
+        if (b.active) this.releaseBullet(b);
       }
+      for (const beam of this.activeBeams) beam.rect.destroy();
+      this.activeBeams.length = 0;
     }
     enemy.destroy();
     this.checkWaveClear();
@@ -802,7 +1711,8 @@ class BulletHellScene extends Phaser.Scene {
     if (enemy.getData('boss')) {
       drops.push('item_line'); // type 2 is guaranteed on bosses
       if (Math.random() < DROP_RATE_TYPE1) drops.push('item_dmg');
-      if ((enemy.getData('level') as number) % BOSS_HP_ITEM_EVERY === 0) drops.push('item_hp');
+      const isSubBoss = enemy.getData('isSubBoss') as boolean;
+      if (!isSubBoss && (enemy.getData('tier') as number) % BOSS_HP_ITEM_EVERY === 0) drops.push('item_hp');
     } else {
       const roll = Math.random();
       if (roll < DROP_RATE_TYPE2) drops.push('item_line');
@@ -873,7 +1783,15 @@ class BulletHellScene extends Phaser.Scene {
 
   private hitPlayer(source: Sprite) {
     if (this.state !== 'playing' || this.time.now < this.invulnUntil) return;
-    if (source.texture.key.startsWith('eb')) source.destroy();
+    if (source.texture.key.startsWith('eb')) this.releaseBullet(source);
+    this.damagePlayer();
+  }
+
+  // Shared "player takes a hit" logic — called both from the bullet/enemy
+  // overlap path above and directly from Prism Loom's hand-rolled beam check
+  // in update(), which has no Sprite to route through physics.add.overlap.
+  private damagePlayer() {
+    if (this.state !== 'playing' || this.time.now < this.invulnUntil) return;
     this.sfx('hit');
     this.tweens.killTweensOf(this.borderFlash);
     this.borderFlash.setAlpha(1);
@@ -896,20 +1814,47 @@ class BulletHellScene extends Phaser.Scene {
     });
   }
 
-  update() {
+  // Prism Loom beam vs. ship — no Arcade body backs a beam, so this is a plain
+  // geometric check each frame instead of a physics overlap callback.
+  private updateBeams() {
+    if (!this.activeBeams.length) return;
+    // Inflate the ship's hurtbox by the beam's half-width instead of giving the
+    // (infinitely thin) line any thickness — equivalent distance test, and
+    // LineToCircle only accepts a line + circle, no line-thickness parameter.
+    const shipCircle = new Phaser.Geom.Circle(this.ship.x, this.ship.y, 8 + PRISM_COLLISION_WIDTH / 2);
+    for (const beam of this.activeBeams) {
+      if (!beam.collide) continue;
+      const { rect } = beam;
+      const dx = Math.cos(rect.rotation) * PRISM_BEAM_REACH;
+      const dy = Math.sin(rect.rotation) * PRISM_BEAM_REACH;
+      const line = new Phaser.Geom.Line(rect.x, rect.y, rect.x + dx, rect.y + dy);
+      if (Phaser.Geom.Intersects.LineToCircle(line, shipCircle)) {
+        this.damagePlayer();
+      }
+    }
+  }
+
+  update(time: number, delta: number) {
     if (this.state === 'playing') {
       const dx = this.target.x - this.ship.x;
       const dy = this.target.y - this.ship.y;
       this.ship.setPosition(this.ship.x + dx * 0.18, this.ship.y + dy * 0.18);
       this.ship.x = Phaser.Math.Clamp(this.ship.x, 16, W - 16);
       this.ship.y = Phaser.Math.Clamp(this.ship.y, 16, H - 16);
+      this.updateBeams();
     }
-    // Recycle offscreen bullets and items
+    // Recycle offscreen bullets (pool release, not destroy) and items; advance
+    // any active per-bullet motion controllers on the enemy bullets that have one.
     for (const b of this.playerBullets.getChildren() as Sprite[]) {
-      if (b.active && (b.y < -20 || b.x < -20 || b.x > W + 20)) b.destroy();
+      if (b.active && (b.y < -20 || b.x < -20 || b.x > W + 20)) this.releaseBullet(b);
     }
     for (const b of this.enemyBullets.getChildren() as Sprite[]) {
-      if (b.active && (b.y < -20 || b.y > H + 20 || b.x < -20 || b.x > W + 20)) b.destroy();
+      if (!b.active) continue;
+      if (b.y < -20 || b.y > H + 20 || b.x < -20 || b.x > W + 20) {
+        this.releaseBullet(b);
+        continue;
+      }
+      this.updateBulletMotion(b, time, delta);
     }
     for (const item of this.items.getChildren() as Sprite[]) {
       if (item.active && item.y > H + 30) {
