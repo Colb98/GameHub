@@ -10,6 +10,11 @@ import successUrl from '../res/sound/success.mp3';
 const W = 600;
 const H = 800;
 const START_LIVES = 3;
+// Enemy bullets are only recycled once they're this far *past* the view — a wide
+// margin (not a tight few px) so bullets that leave the field can still curve or
+// reverse back in (e.g. Butterfly's outward wing bullets returning on the fold).
+const BULLET_RECYCLE_MARGIN_X = W * 0.5;
+const BULLET_RECYCLE_MARGIN_Y = H * 0.3;
 
 /* ------------------------------- wave config ------------------------------- */
 const WAVES_PER_CYCLE = 5; // last wave of each cycle is a boss wave (sub-boss or boss)
@@ -162,14 +167,24 @@ const BUTTERFLY_MIN_SPEED = 12;
 const BUTTERFLY_PAUSE_MS = 350;
 const BUTTERFLY_REVERSE_SPEED = 115;
 const BUTTERFLY_RETURN_BASE_RAD = 0; // innermost bullets fold straight down (wings meet — no center safe lane)
-const BUTTERFLY_RETURN_FAN_RAD = Phaser.Math.DegToRad(78); // fan the outermost bullet curls out to, per side
+const BUTTERFLY_RETURN_FAN_RAD = Phaser.Math.DegToRad(94); // fan the outermost bullet curls out to, per side
 const BUTTERFLY_RETURN_MS = 650; // how long the fold curls out before it flies straight
-const BUTTERFLY_WING_SPREAD_RAD = Phaser.Math.DegToRad(70);
-const BUTTERFLY_WING_INNER_RAD = Phaser.Math.DegToRad(20);
+const BUTTERFLY_WING_SPREAD_RAD = Phaser.Math.DegToRad(112);
+const BUTTERFLY_WING_INNER_RAD = Phaser.Math.DegToRad(5);
+// Alternate volleys are offset by half a bullet slot so successive fans interlock
+// (O_O_O over _O_O_) and close the gaps a plain repeat would leave.
+const BUTTERFLY_ALIGN_SHIFT = 0.5;
 // Second, smaller wing fired after the first one closes, rotated for a fresh silhouette.
 const BUTTERFLY_WING2_ROTATION_RAD = Phaser.Math.DegToRad(18);
 const BUTTERFLY_WING2_BULLETS = 6;
 const BUTTERFLY_PAUSE_SHOT_SPEED = 260; // hard-only sparse straight shots fired during the pause
+// Second reversal: after the fold sinks past the player to near the bottom, the
+// bullets brake to a stop, hover, then crawl back UP through the player at a
+// fraction of their launch speed — a slow rising wall that keeps the pressure on.
+const BUTTERFLY_SINK_STOP_FRAC = 0.8; // stop ~10% of the screen height above the bottom
+const BUTTERFLY_SINK_BRAKE_DECEL = 260; // px/s^2 braking once the stop line is reached
+const BUTTERFLY_SINK_HOLD_MS = 350; // hover at the stop line before rising
+const BUTTERFLY_RISE_SPEED_FRAC = 0.5; // reverse at 50% of BUTTERFLY_INITIAL_SPEED 
 
 // Prism Loom — sweeping beams + petal crossfire. Beams have no Arcade Physics
 // primitive, so they're tracked/collided by hand — see activeBeams/update().
@@ -343,6 +358,22 @@ const ALL_SKILLS: SkillId[] = [
   'mandala',
   'loom',
 ];
+// "Advanced" skills (peony onward) — the elaborate curated/signature patterns.
+// The boss briefly turns invincible while casting one so it can't be bursted
+// down before the pattern reads; the four basics (cone/radial/burst/aimed) never do.
+const ADVANCED_SKILLS = new Set<SkillId>([
+  'peony',
+  'clock',
+  'lattice',
+  'butterfly',
+  'prism',
+  'bloom',
+  'mandala',
+  'loom',
+]);
+const BOSS_ADVANCED_INVULN_MIN_MS = 2000; // floor for the invincible window
+const BOSS_ADVANCED_INVULN_FRAC = 0.75; // ...else this share of the (measured) skill time
+
 const PROCEDURAL_COMBO_CHANCE = 0.25;
 
 // Past the curated table: sample from the full pool at hard tuning, with a
@@ -489,13 +520,22 @@ interface MotionState {
   // along a fixed reverseAngleRad (down + inward), curling by reverseCurlRad for
   // reverseDurationMs before flying straight. All bullets of one wing share the
   // same reverseAngleRad so the fan keeps its order (no mirror-inverted crossing).
-  stage?: 'decel' | 'pause' | 'return';
+  stage?: 'decel' | 'pause' | 'return' | 'sink' | 'brake' | 'sinkHold';
   pauseMs?: number;
   reverseSpeed?: number;
   reverseAngleRad?: number;
   reverseCurlRad?: number;
   reverseDurationMs?: number;
   reverseTex?: string; // swap to a brighter texture the moment the fold launches
+  // Optional tail after the fold: sink to sinkStopY, brake to a stop, hover, then
+  // reverse at riseSpeed back along the flipped heading (butterfly's second
+  // reversal). Omitted = fly straight. `volley` is shared by all bullets of one
+  // fan so the first to reach sinkStopY turns the whole volley at once;
+  // sinkHeadingRad remembers the heading to reverse along after the stop.
+  sinkStopY?: number;
+  riseSpeed?: number;
+  volley?: { reversing: boolean };
+  sinkHeadingRad?: number;
 
   // delayed: body spawns disabled (renders if visible, but can't collide — see
   // Body.enable filtering in spawnEnemyBullet/releaseBullet) until launchAtMs,
@@ -538,6 +578,7 @@ class BulletHellScene extends Phaser.Scene {
   private bossBarBg?: Phaser.GameObjects.Rectangle;
   private bossBarFill?: Phaser.GameObjects.Rectangle;
   private bossLabel?: Phaser.GameObjects.Text;
+  private bossAura?: Phaser.GameObjects.Arc; // yellow glow shown while the boss is invincible
   private borderFlash!: Phaser.GameObjects.Rectangle;
   private target = new Phaser.Math.Vector2(W / 2, H * 0.8);
   private activeBeams: BeamState[] = [];
@@ -1117,12 +1158,55 @@ class BulletHellScene extends Phaser.Scene {
       bullet.setData('motion', motion);
       return;
     }
-    // stage === 'return': curl the fold for reverseDurationMs, then fly straight.
-    if (nowMs - motion.stageStartedAt >= (motion.reverseDurationMs ?? 0)) {
-      bullet.setData('motion', undefined);
+    if (motion.stage === 'return') {
+      // Curl the fold for reverseDurationMs, then either fly straight (default)
+      // or, if a sink target is set, hand off to the second-reversal tail.
+      if (nowMs - motion.stageStartedAt >= (motion.reverseDurationMs ?? 0)) {
+        if (motion.sinkStopY === undefined) {
+          bullet.setData('motion', undefined);
+          return;
+        }
+        motion.stage = 'sink';
+        bullet.setData('motion', motion);
+        return;
+      }
+      Phaser.Math.Rotate(body.velocity, (motion.reverseCurlRad ?? 0) * dt);
       return;
     }
-    Phaser.Math.Rotate(body.velocity, (motion.reverseCurlRad ?? 0) * dt);
+    if (motion.stage === 'sink') {
+      // Coast on the folded heading. The first bullet of the volley to cross the
+      // stop line low on the screen (past the player) flips the shared trigger,
+      // so the whole volley turns around together — not each bullet as it arrives.
+      const vol = motion.volley;
+      const reached = bullet.y >= (motion.sinkStopY ?? H);
+      if (vol && reached) vol.reversing = true;
+      if (vol ? vol.reversing : reached) {
+        motion.sinkHeadingRad = body.velocity.angle(); // remember it to reverse along
+        motion.stage = 'brake';
+        bullet.setData('motion', motion);
+      }
+      return;
+    }
+    if (motion.stage === 'brake') {
+      const heading = motion.sinkHeadingRad ?? body.velocity.angle();
+      const nextSpeed = Math.max(0, body.velocity.length() - BUTTERFLY_SINK_BRAKE_DECEL * dt);
+      bullet.setVelocity(Math.cos(heading) * nextSpeed, Math.sin(heading) * nextSpeed);
+      if (nextSpeed <= 1) {
+        bullet.setVelocity(0, 0);
+        motion.stage = 'sinkHold';
+        motion.stageStartedAt = nowMs;
+        bullet.setData('motion', motion);
+      }
+      return;
+    }
+    // stage === 'sinkHold': hover briefly, then reverse a second time — back the
+    // way it came (its last heading, flipped 180°) at riseSpeed — and hand the
+    // bullet off to constant-velocity flight.
+    if (nowMs - motion.stageStartedAt < BUTTERFLY_SINK_HOLD_MS) return;
+    const rev = (motion.sinkHeadingRad ?? -Math.PI / 2) + Math.PI;
+    const riseSpeed = motion.riseSpeed ?? 0;
+    bullet.setVelocity(Math.cos(rev) * riseSpeed, Math.sin(rev) * riseSpeed);
+    bullet.setData('motion', undefined);
   }
 
   // Dev-only smoke test for the motion controller (?motiontest=1): fires one
@@ -1182,6 +1266,23 @@ class BulletHellScene extends Phaser.Scene {
       roster: bossRosterForTier(tier), // computed once, never re-rolled mid-fight
     });
     this.boss = boss;
+
+    // Invincibility aura: a soft yellow halo behind the boss, hidden until a
+    // skill turns invincibility on (positioned + toggled each frame in update()).
+    this.bossAura?.destroy();
+    this.bossAura = this.add
+      .circle(boss.x, boss.y, 42, 0xffe066, 0.16)
+      .setStrokeStyle(3, 0xffd21a, 0.9)
+      .setDepth(1)
+      .setVisible(false);
+    this.tweens.add({
+      targets: this.bossAura,
+      scale: 1.16,
+      yoyo: true,
+      repeat: -1,
+      duration: 420,
+      ease: 'Sine.easeInOut',
+    });
 
     const barW = W - 160;
     this.bossLabel = this.add
@@ -1284,6 +1385,35 @@ class BulletHellScene extends Phaser.Scene {
       ids = [Phaser.Math.RND.pick(pool.filter((m) => m !== last))];
     }
     boss.setData('lastMove', ids[ids.length - 1]);
+
+    // Advanced skills grant a brief invincible window (yellow aura). We don't
+    // know the cast's length up front, so we scale off the *previous* measured
+    // duration of the same skill(s): invincible for max(2s, 75% of it), leaving
+    // the pattern's tail vulnerable so the player can still punish it. The very
+    // first cast (no measurement yet) holds invincibility for the whole cast.
+    if (ids.some((id) => ADVANCED_SKILLS.has(id))) {
+      const durs = (boss.getData('skillDur') as Record<string, number>) ?? {};
+      const key = ids.join('+');
+      const prev = durs[key];
+      const start = this.time.now;
+      boss.setData(
+        'invulnUntil',
+        prev !== undefined
+          ? start + Math.max(BOSS_ADVANCED_INVULN_MIN_MS, prev * BOSS_ADVANCED_INVULN_FRAC)
+          : start + 600000,
+      );
+      this.runSkills(boss, ids, ctx, () => {
+        durs[key] = this.time.now - start;
+        boss.setData('skillDur', durs);
+        // First (unmeasured) cast: clear now, but honor the 2s floor.
+        if (prev === undefined) {
+          boss.setData('invulnUntil', Math.max(this.time.now, start + BOSS_ADVANCED_INVULN_MIN_MS));
+        }
+        next();
+      });
+      return;
+    }
+
     this.runSkills(boss, ids, ctx, next);
   }
 
@@ -1678,11 +1808,16 @@ class BulletHellScene extends Phaser.Scene {
     const reverseTex = ctx.texAim; // brighter color once the wings fold back in
 
     this.withStationaryBoss(boss, W / 2, (finish) => {
-      const fireWing = (bullets: number, extraRotationRad: number) => {
+      const fireWing = (bullets: number, extraRotationRad: number, alignShift = 0) => {
         const returnSec = BUTTERFLY_RETURN_MS / 1000;
+        // Shared across both wings of this volley: the first bullet to reach the
+        // sink line flips this, turning the whole volley around together.
+        const volley = { reversing: false };
         for (const wing of [-1, 1]) {
           for (let i = 0; i < bullets; i++) {
-            const t = bullets > 1 ? i / (bullets - 1) : 0;
+            // alignShift nudges the whole fan by a fraction of a slot so alternate
+            // volleys interleave (brick pattern) instead of landing on top of each other.
+            const t = bullets > 1 ? (i + alignShift) / (bullets - 1) : 0;
             const spread = t * BUTTERFLY_WING_SPREAD_RAD;
             const angle = Math.PI / 2 + wing * (BUTTERFLY_WING_INNER_RAD + spread + extraRotationRad);
             // The fold launches straight down, then curls out to this bullet's own
@@ -1699,6 +1834,9 @@ class BulletHellScene extends Phaser.Scene {
               reverseCurlRad: (wing * fanOffset) / returnSec, // total curl over the return = fanOffset
               reverseDurationMs: BUTTERFLY_RETURN_MS,
               reverseTex,
+              sinkStopY: H * BUTTERFLY_SINK_STOP_FRAC,
+              riseSpeed: BUTTERFLY_INITIAL_SPEED * BUTTERFLY_RISE_SPEED_FRAC,
+              volley,
             });
           }
         }
@@ -1712,7 +1850,9 @@ class BulletHellScene extends Phaser.Scene {
       let v = 0;
       const fireVolley = () => {
         if (!boss.active || this.state !== 'playing') return;
-        fireWing(BUTTERFLY_FAN_BULLETS, 0);
+        // Every other volley is half-slot offset so the fans interlock into a
+        // denser wall (see BUTTERFLY_ALIGN_SHIFT).
+        fireWing(BUTTERFLY_FAN_BULLETS, 0, v % 2 === 1 ? BUTTERFLY_ALIGN_SHIFT : 0);
         v += 1;
         if (v < volleys) {
           this.time.delayedCall(BUTTERFLY_VOLLEY_INTERVAL_MS, fireVolley);
@@ -2260,8 +2400,11 @@ class BulletHellScene extends Phaser.Scene {
     this.bossBarBg?.destroy();
     this.bossBarFill?.destroy();
     this.bossLabel?.destroy();
+    if (this.bossAura) this.tweens.killTweensOf(this.bossAura);
+    this.bossAura?.destroy();
     this.bossBarBg = this.bossBarFill = undefined;
     this.bossLabel = undefined;
+    this.bossAura = undefined;
   }
 
   /* ------------------------------ player firing ----------------------------- */
@@ -2294,6 +2437,12 @@ class BulletHellScene extends Phaser.Scene {
 
   private onPlayerBulletHit(bullet: Sprite, enemy: Sprite) {
     if (!bullet.active || !enemy.active) return;
+    // Invincible boss (mid advanced-skill): the aura absorbs the shot — the
+    // bullet is spent but deals no damage.
+    if (enemy.getData('boss') && this.time.now < ((enemy.getData('invulnUntil') as number) ?? 0)) {
+      this.releaseBullet(bullet);
+      return;
+    }
     const dmg = (bullet.getData('dmg') as number) ?? 1;
     this.releaseBullet(bullet);
     const hp = (enemy.getData('hp') as number) - dmg;
@@ -2327,10 +2476,9 @@ class BulletHellScene extends Phaser.Scene {
       this.sfx('success');
       this.boss = null;
       this.destroyBossBar();
-      // Reward: clear the screen of enemy bullets (and any live Prism beams) when the boss falls.
-      for (const b of this.enemyBullets.getChildren() as Sprite[]) {
-        if (b.active) this.releaseBullet(b);
-      }
+      // In-flight skill bullets are left on screen on purpose — the fight's last
+      // volley keeps flying and must still be dodged. Only the Prism beams are
+      // cleared (a beam with no boss to anchor it would hang in mid-air).
       for (const beam of this.activeBeams) beam.rect.destroy();
       this.activeBeams.length = 0;
     }
@@ -2475,6 +2623,13 @@ class BulletHellScene extends Phaser.Scene {
       this.ship.y = Phaser.Math.Clamp(this.ship.y, 16, H - 16);
       this.updateBeams();
     }
+    // Keep the invincibility aura glued to the boss while its window is open.
+    if (this.bossAura) {
+      const b = this.boss;
+      const invuln = !!b && b.active && time < ((b.getData('invulnUntil') as number) ?? 0);
+      this.bossAura.setVisible(invuln);
+      if (invuln && b) this.bossAura.setPosition(b.x, b.y);
+    }
     // Recycle offscreen bullets (pool release, not destroy) and items; advance
     // any active per-bullet motion controllers on the enemy bullets that have one.
     for (const b of this.playerBullets.getChildren() as Sprite[]) {
@@ -2482,7 +2637,12 @@ class BulletHellScene extends Phaser.Scene {
     }
     for (const b of this.enemyBullets.getChildren() as Sprite[]) {
       if (!b.active) continue;
-      if (b.y < -20 || b.y > H + 20 || b.x < -20 || b.x > W + 20) {
+      if (
+        b.y < -BULLET_RECYCLE_MARGIN_Y ||
+        b.y > H + BULLET_RECYCLE_MARGIN_Y ||
+        b.x < -BULLET_RECYCLE_MARGIN_X ||
+        b.x > W + BULLET_RECYCLE_MARGIN_X
+      ) {
         this.releaseBullet(b);
         continue;
       }
