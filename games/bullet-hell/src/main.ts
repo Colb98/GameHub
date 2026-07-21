@@ -148,7 +148,10 @@ const LATTICE_ARMED_ALPHA = 0.9;
 const LATTICE_BULLET_SPACING = 26;
 const LATTICE_GAP_BULLETS = 3;
 
-// Butterfly Requiem — mirrored fans that decelerate, pause, then reverse ('decelPauseReverse').
+// Butterfly Requiem — mirrored fans that decelerate, pause, then fold back in
+// ('decelPauseReverse'). On the fold each bullet launches straight down and then
+// slowly curls out to its own fan angle, so each wing aims across the whole lower
+// screen (symmetric per side) instead of clumping back toward one edge.
 const BUTTERFLY_FAN_BULLETS = 11; // per wing, per volley
 const BUTTERFLY_VOLLEYS = 4;
 const BUTTERFLY_VOLLEYS_HARD = 6;
@@ -158,7 +161,9 @@ const BUTTERFLY_DECELERATION = -95;
 const BUTTERFLY_MIN_SPEED = 12;
 const BUTTERFLY_PAUSE_MS = 350;
 const BUTTERFLY_REVERSE_SPEED = 115;
-const BUTTERFLY_REVERSE_ROTATION_RAD = Phaser.Math.DegToRad(12);
+const BUTTERFLY_RETURN_BASE_RAD = 0; // innermost bullets fold straight down (wings meet — no center safe lane)
+const BUTTERFLY_RETURN_FAN_RAD = Phaser.Math.DegToRad(78); // fan the outermost bullet curls out to, per side
+const BUTTERFLY_RETURN_MS = 650; // how long the fold curls out before it flies straight
 const BUTTERFLY_WING_SPREAD_RAD = Phaser.Math.DegToRad(70);
 const BUTTERFLY_WING_INNER_RAD = Phaser.Math.DegToRad(20);
 // Second, smaller wing fired after the first one closes, rotated for a fresh silhouette.
@@ -181,7 +186,87 @@ const PRISM_PETAL_SPEED = 92;
 const PRISM_PETAL_SPREAD_RAD = Phaser.Math.DegToRad(14);
 const PRISM_RECOVERY_MS = 900;
 
-type SkillId = 'cone' | 'radial' | 'burst' | 'aimed' | 'peony' | 'clock' | 'lattice' | 'butterfly' | 'prism';
+// Celestial Bloom — a flower of 'formation' bullets that draws on petal-by-petal
+// (Form), grows + rotates into a wall around the boss (Bloom), holds, then
+// releases either straight out or along the petal tangents as bands. Petals are
+// an overlapping-circle rosette (flower-of-life: circle radius = ring radius).
+const BLOOM_PETALS = 8; // overlapping circles around the flower center
+const BLOOM_PETAL_SAMPLES = 36; // bullets sampled around each circle
+const BLOOM_PETAL_SAMPLES_HARD = 48;
+const BLOOM_PETAL_RADIUS = 55; // circle radius = ring radius, at full scale
+const BLOOM_MIN_RADIUS = 6; // skip samples that land on the flower center (degenerate radius/direction)
+const BLOOM_FORM_SCALE = 0.55; // tight around the boss while forming
+const BLOOM_FULL_SCALE = 1.2; // bloomed wall
+const BLOOM_FORM_STEP_MS = 14; // delay between each petal bullet appearing (the draw-on)
+const BLOOM_GROW_MS = 1400; // Form -> Bloom grow/rotate duration
+const BLOOM_ROTATE_RAD = Phaser.Math.DegToRad(30); // small rotation during the bloom, for appeal
+const BLOOM_HOLD_MS = 1000; // wall around the boss before release
+const BLOOM_RELEASE_SPEED = 135;
+
+// Lunar Mandala — 3-4 concentric bullet rings, each a chain with 1-2 gaps, that
+// counter-rotate (inner faster) while their shared center drifts down toward the
+// player and the whole mandala expands, so the escape gaps sweep and shift. Rings
+// are 'formation' bullets (one FlowerFormation per ring: each ring gets its own
+// rotation tween for its own speed/direction, all share the same descending
+// center + growing scale). The second half adds slow, oversized aimed shots so
+// the player can't just park in one gap.
+const MANDALA_RINGS = 3;
+const MANDALA_RINGS_HARD = 4;
+const MANDALA_INNER_RADIUS = 58; // innermost ring, at formation scale 1
+const MANDALA_RADIUS_STEP = 46; // each ring further out adds this
+const MANDALA_ARC_SPACING = 24; // target px between adjacent bullets on a ring
+const MANDALA_MAX_RING_BULLETS = 64;
+const MANDALA_GAPS_MIN = 1; // each ring omits 1-2 contiguous arcs as escape gates
+const MANDALA_GAPS_MAX = 2;
+const MANDALA_GAP_BULLETS = 4; // bullets skipped per gap
+const MANDALA_CHARGE_MS = 600; // boss charge (scale pulse) before the rings draw
+const MANDALA_HOLD_MS = 300; // hold so the player can read the gaps before motion
+const MANDALA_CONTRACT_MS = 3200; // expand + descend phase
+const MANDALA_SCALE_END = 1.75; // rings grow from 1x to this while descending
+const MANDALA_ANGULAR_BASE = 0.5; // rad/s of the outermost ring
+const MANDALA_ANGULAR_STEP = 0.28; // + per ring inward — inner rings spin faster
+const MANDALA_RELEASE_SPEED = 150; // outward scatter when the mandala dissolves
+const MANDALA_BIG_SHOTS = 3; // second-half aimed pressure shots
+const MANDALA_BIG_SHOTS_HARD = 5;
+const MANDALA_BIG_GAP_MS = 480;
+const MANDALA_BIG_SPEED = 55; // ~0.2x the normal aimed speed — slow, forces movement
+const MANDALA_BIG_RADIUS = 10; // 2x the normal bullet radius (20px texture + body)
+
+// Starweaver's Loom — glowing bullet "threads" laid along Bezier curves that span
+// the screen edge-to-edge. The threads draw on (weave), the curves undulate in
+// place as a telegraph, a red flash cues release, then every bullet launches
+// perpendicular to its curve (alternating left/right normal) with curves releasing
+// staggered — a crosshatch rain. Threads are 'delayed' ghosts parked far out then
+// flipped to launch per curve; undulation repositions the ghosts along getPoint(t).
+const LOOM_CURVES = 4;
+const LOOM_CURVES_HARD = 6;
+const LOOM_EDGE_TOP = 130; // vertical band the curve endpoints span
+const LOOM_EDGE_BOT = 560;
+const LOOM_BULLET_SPACING = 30; // target px between bullets along a curve
+const LOOM_MIN_BULLETS = 12;
+const LOOM_MAX_BULLETS = 26;
+const LOOM_CTRL_BOW = 90; // control-point vertical bow (alternates sign per curve)
+const LOOM_WEAVE_STEP_MS = 26; // delay between successive bullets drawing on
+const LOOM_UNDULATE_MS = 1500; // curves undulate in place (telegraph)
+const LOOM_UNDULATE_AMP = 22; // control-point wobble amplitude
+const LOOM_FLASH_MS = 240; // red flash cueing release
+const LOOM_CURVE_STAGGER_MS = 150; // 0.15s between successive curves releasing
+const LOOM_BULLET_SPEED = 205; // perpendicular rain speed
+const LOOM_PREVIEW_ALPHA = 0.16; // faint preview curve alpha
+
+type SkillId =
+  | 'cone'
+  | 'radial'
+  | 'burst'
+  | 'aimed'
+  | 'peony'
+  | 'clock'
+  | 'lattice'
+  | 'butterfly'
+  | 'prism'
+  | 'bloom'
+  | 'mandala'
+  | 'loom';
 
 interface SkillCtx {
   texAim: string;
@@ -197,23 +282,36 @@ interface TierRoster {
   combo?: SkillId[]; // procedural-only: run concurrently in phase 3 instead of signature
 }
 
-// One new skill introduced per tier through tier 6, then "remix" tiers 7-9 reuse
-// skills at their own hard tuning, then tier 10 is a curated capstone (prism,
-// hard, as a single signature — no combo; combo is procedural-only, see below).
+// One new skill introduced per tier through tier 7 (peony, clock, lattice,
+// butterfly, bloom, prism), then "remix" tiers 8-10 reuse skills at their own
+// hard tuning, tier 11 is a curated capstone (prism, hard, as a single
+// signature), and tiers 12-13 introduce the two lunar skills (mandala, loom).
+// Combo is procedural-only, tier 14+ (see below).
 const BOSS_TIERS: TierRoster[] = [
   { base: ['cone', 'radial', 'burst'] },
   { base: ['radial', 'burst', 'aimed'], signature: 'peony' },
   { base: ['burst', 'aimed', 'peony'], signature: 'clock' },
   { base: ['aimed', 'peony', 'clock'], signature: 'lattice' },
   { base: ['peony', 'clock', 'lattice'], signature: 'butterfly' },
-  { base: ['clock', 'lattice', 'butterfly'], signature: 'prism' },
+  { base: ['clock', 'lattice', 'butterfly'], signature: 'bloom' },
+  { base: ['lattice', 'butterfly', 'bloom'], signature: 'prism' },
   { base: ['radial', 'aimed', 'lattice'], signature: 'peony', hardIds: ['peony'] },
-  { base: ['burst', 'clock', 'butterfly'], signature: 'lattice', hardIds: ['lattice'] },
-  { base: ['peony', 'clock', 'prism'], signature: 'butterfly', hardIds: ['peony', 'clock', 'butterfly'] },
+  { base: ['burst', 'clock', 'bloom'], signature: 'butterfly', hardIds: ['bloom', 'butterfly'] },
+  { base: ['peony', 'clock', 'prism'], signature: 'bloom', hardIds: ['peony', 'clock', 'bloom'] },
   {
     base: ['lattice', 'butterfly', 'clock'],
     signature: 'prism',
     hardIds: ['lattice', 'butterfly', 'clock', 'prism'],
+  },
+  {
+    base: ['butterfly', 'bloom', 'prism'],
+    signature: 'mandala',
+    hardIds: ['bloom', 'prism', 'mandala'],
+  },
+  {
+    base: ['prism', 'bloom', 'mandala'],
+    signature: 'loom',
+    hardIds: ['bloom', 'mandala', 'loom'],
   },
 ];
 
@@ -234,11 +332,14 @@ const ALL_SKILLS: SkillId[] = [
   'lattice',
   'butterfly',
   'prism',
+  'bloom',
+  'mandala',
+  'loom',
 ];
 const PROCEDURAL_COMBO_CHANCE = 0.25;
 
-// Tier 11+: sample from the full pool at hard tuning, with a chance of a
-// two-skill combo phase (the only place two skills ever run concurrently).
+// Past the curated table: sample from the full pool at hard tuning, with a
+// chance of a two-skill combo phase (the only place two skills ever run at once).
 function proceduralRoster(): TierRoster {
   const shuffled = Phaser.Utils.Array.Shuffle(ALL_SKILLS.slice());
   const [a, b, c, sig, second] = shuffled;
@@ -348,10 +449,21 @@ type Sprite = Phaser.Physics.Arcade.Sprite;
  * A bullet with no 'motion' data just keeps the velocity it was launched with,
  * i.e. today's behavior, unchanged.
  */
-type MotionMode = 'curved' | 'accel' | 'decelPauseReverse' | 'delayed';
+type MotionMode = 'curved' | 'accel' | 'decelPauseReverse' | 'delayed' | 'formation';
 // Shared telegraph look for every 'delayed' (ghost) bullet, regardless of which
 // skill spawned it — spawnEnemyBullet dims it, updateBulletMotion restores it on launch.
 const GHOST_ALPHA = 0.25;
+
+// Shared, tweenable transform for a 'formation' bullet cluster (Bloom's flower):
+// every petal bullet holds a reference to one of these and is positioned from it
+// each frame, so scaling/rotating the whole flower is one tween on this object.
+interface FlowerFormation {
+  cx: number;
+  cy: number;
+  scale: number;
+  rotation: number;
+  released: boolean; // once true, petals stop being positioned and fly free
+}
 
 interface MotionState {
   mode: MotionMode;
@@ -366,17 +478,17 @@ interface MotionState {
   minSpeed?: number;
   maxSpeed?: number;
 
-  // decelPauseReverse: decelerate to minSpeed, hold for pauseMs, then launch once
-  // along the heading mirrored across the vertical axis (+ rotated) — keeps
-  // advancing the same direction it was heading, just crossing over, rather
-  // than a full 180° reverse back the way it came. `stage` tracks progress;
-  // `headingRad` is internal bookkeeping (the heading is lost once velocity hits zero).
-  stage?: 'decel' | 'pause';
-  headingRad?: number;
+  // decelPauseReverse: decelerate to a hover, hold for pauseMs, then fold back
+  // along a fixed reverseAngleRad (down + inward), curling by reverseCurlRad for
+  // reverseDurationMs before flying straight. All bullets of one wing share the
+  // same reverseAngleRad so the fan keeps its order (no mirror-inverted crossing).
+  stage?: 'decel' | 'pause' | 'return';
   pauseMs?: number;
   reverseSpeed?: number;
-  reverseRotationRad?: number;
-  reverseTex?: string; // swap to a brighter texture the moment reversal launches
+  reverseAngleRad?: number;
+  reverseCurlRad?: number;
+  reverseDurationMs?: number;
+  reverseTex?: string; // swap to a brighter texture the moment the fold launches
 
   // delayed: body spawns disabled (renders if visible, but can't collide — see
   // Body.enable filtering in spawnEnemyBullet/releaseBullet) until launchAtMs,
@@ -384,6 +496,13 @@ interface MotionState {
   launchAtMs?: number;
   launchAngleRad?: number;
   launchSpeed?: number;
+
+  // formation: position is driven each frame from the shared FlowerFormation
+  // (kinematic, velocity 0) until it's released — see updateBulletMotion / bloomSkill.
+  formation?: FlowerFormation;
+  baseAngleRad?: number; // slot angle at unit scale, before formation.rotation
+  baseRadius?: number; // slot radius at unit scale, before formation.scale
+  tangentRad?: number; // petal tangent direction (for the tangent-band release)
 }
 
 class BulletHellScene extends Phaser.Scene {
@@ -440,7 +559,9 @@ class BulletHellScene extends Phaser.Scene {
     this.addStarfield();
 
     this.playerBullets = this.physics.add.group({ maxSize: 120 });
-    this.enemyBullets = this.physics.add.group({ maxSize: 400 });
+    // Sized for the heaviest moment: a hard Bloom's second flower forming (~370
+    // formation bullets) while the first flower's release is still on screen.
+    this.enemyBullets = this.physics.add.group({ maxSize: 800 });
     this.enemies = this.physics.add.group();
     this.items = this.physics.add.group();
 
@@ -456,7 +577,7 @@ class BulletHellScene extends Phaser.Scene {
       .setOrigin(0.5, 0)
       .setDepth(10);
     this.livesText = this.add
-      .text(W - 12, 10, '♥'.repeat(START_LIVES), {
+      .text(W - 12, 10, '♥ '.repeat(START_LIVES), {
         fontFamily: 'monospace',
         fontSize: '22px',
         color: '#ff5d8f',
@@ -581,6 +702,20 @@ class BulletHellScene extends Phaser.Scene {
       g.fillStyle(color).fillCircle(5, 5, 5);
       g.fillStyle(0xffffff, 0.85).fillCircle(5, 5, 2);
       g.generateTexture(key, 10, 10);
+      g.destroy();
+    }
+    return key;
+  }
+
+  // Double-size enemy-bullet texture (Lunar Mandala's slow aimed shots) — the
+  // body is re-circled to radius 10 at spawn so the hitbox matches the visual.
+  private bigBulletTexture(color: number): string {
+    const key = `ebbig_${color.toString(16)}`;
+    if (!this.textures.exists(key)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(color).fillCircle(10, 10, 10);
+      g.fillStyle(0xffffff, 0.85).fillCircle(10, 10, 4);
+      g.generateTexture(key, 20, 20);
       g.destroy();
     }
     return key;
@@ -927,33 +1062,53 @@ class BulletHellScene extends Phaser.Scene {
       return;
     }
 
+    if (motion.mode === 'formation') {
+      const f = motion.formation;
+      if (!f || f.released) {
+        bullet.setData('motion', undefined);
+        return;
+      }
+      // Kinematic: position is driven entirely from the shared, tweened transform.
+      const a = (motion.baseAngleRad ?? 0) + f.rotation;
+      const r = (motion.baseRadius ?? 0) * f.scale;
+      bullet.setVelocity(0, 0);
+      bullet.setPosition(f.cx + Math.cos(a) * r, f.cy + Math.sin(a) * r);
+      return;
+    }
+
     // decelPauseReverse
     if ((motion.stage ?? 'decel') === 'decel') {
       const heading = body.velocity.angle();
       const nextSpeed = Math.max(0, body.velocity.length() + (motion.acceleration ?? 0) * dt);
       bullet.setVelocity(Math.cos(heading) * nextSpeed, Math.sin(heading) * nextSpeed);
       if (nextSpeed <= (motion.minSpeed ?? 0)) {
-        bullet.setVelocity(0, 0);
+        bullet.setVelocity(0, 0); // crisp hover, the telegraph beat before the fold
         motion.stage = 'pause';
-        motion.headingRad = heading;
         motion.stageStartedAt = nowMs;
+        bullet.setData('motion', motion);
       }
+      return;
+    }
+    if (motion.stage === 'pause') {
+      if (nowMs - motion.stageStartedAt < (motion.pauseMs ?? 0)) return;
+      // Launch the coherent fold: a fixed down-and-inward heading per wing (all a
+      // wing's bullets share it, so the fan keeps its order instead of the old
+      // velocity-mirror inverting it into a crossing X), brighter tex, then curl.
+      const angle = motion.reverseAngleRad ?? Math.PI / 2;
+      const speed = motion.reverseSpeed ?? 0;
+      bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+      if (motion.reverseTex) bullet.setTexture(motion.reverseTex);
+      motion.stage = 'return';
+      motion.stageStartedAt = nowMs;
       bullet.setData('motion', motion);
       return;
     }
-    // stage === 'pause'
-    if (nowMs - motion.stageStartedAt < (motion.pauseMs ?? 0)) return;
-    // Mirror across the vertical axis (negate the x-component, keep y) rather
-    // than a full 180° reverse: a full reverse sends the bullet back the way
-    // it came, i.e. up past the boss and away from the player. Mirroring keeps
-    // it advancing in the same downward direction while crossing over toward
-    // (and past) center, which is what actually threatens the player.
-    const reverseHeading = Math.PI - (motion.headingRad ?? 0) + (motion.reverseRotationRad ?? 0);
-    const reverseSpeed = motion.reverseSpeed ?? 0;
-    bullet.setVelocity(Math.cos(reverseHeading) * reverseSpeed, Math.sin(reverseHeading) * reverseSpeed);
-    if (motion.reverseTex) bullet.setTexture(motion.reverseTex); // brighter color once it folds back in
-    // Reversal is a one-shot launch — nothing more to do per-frame after this.
-    bullet.setData('motion', undefined);
+    // stage === 'return': curl the fold for reverseDurationMs, then fly straight.
+    if (nowMs - motion.stageStartedAt >= (motion.reverseDurationMs ?? 0)) {
+      bullet.setData('motion', undefined);
+      return;
+    }
+    Phaser.Math.Rotate(body.velocity, (motion.reverseCurlRad ?? 0) * dt);
   }
 
   // Dev-only smoke test for the motion controller (?motiontest=1): fires one
@@ -978,7 +1133,9 @@ class BulletHellScene extends Phaser.Scene {
       minSpeed: 5,
       pauseMs: 500,
       reverseSpeed: 150,
-      reverseRotationRad: 0,
+      reverseAngleRad: Math.PI / 2, // fold straight back down
+      reverseCurlRad: 0,
+      reverseDurationMs: 0,
     });
     this.spawnEnemyBullet(x + 90, y, 0, 0, 'ebullet', {
       mode: 'delayed',
@@ -1169,6 +1326,15 @@ class BulletHellScene extends Phaser.Scene {
         break;
       case 'prism':
         this.prismSkill(boss, ctx, done);
+        break;
+      case 'bloom':
+        this.bloomSkill(boss, ctx, done);
+        break;
+      case 'mandala':
+        this.mandalaSkill(boss, ctx, done);
+        break;
+      case 'loom':
+        this.loomSkill(boss, ctx, done);
         break;
     }
   }
@@ -1489,9 +1655,9 @@ class BulletHellScene extends Phaser.Scene {
   }
 
   // Butterfly Requiem — mirrored wing fans that drift outward, decelerate to a
-  // hover, pause, then fold back inward at a rotated angle. Built entirely on
-  // the 'decelPauseReverse' motion mode; opposite reverseRotationRad per wing
-  // gives the two sides opposite handedness on the reversal.
+  // hover, pause, then fold back down-and-inward as a coherent sweep. Built on
+  // the 'decelPauseReverse' motion mode; each wing folds along one shared heading
+  // (fan keeps its order — no crossing) with opposite curl for the two sides.
   private butterflySkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
     const hard = ctx.hardIds.has('butterfly');
     const volleys = hard ? BUTTERFLY_VOLLEYS_HARD : BUTTERFLY_VOLLEYS;
@@ -1499,17 +1665,25 @@ class BulletHellScene extends Phaser.Scene {
 
     this.withStationaryBoss(boss, W / 2, (finish) => {
       const fireWing = (bullets: number, extraRotationRad: number) => {
+        const returnSec = BUTTERFLY_RETURN_MS / 1000;
         for (const wing of [-1, 1]) {
           for (let i = 0; i < bullets; i++) {
-            const spread = bullets > 1 ? (i / (bullets - 1)) * BUTTERFLY_WING_SPREAD_RAD : 0;
+            const t = bullets > 1 ? i / (bullets - 1) : 0;
+            const spread = t * BUTTERFLY_WING_SPREAD_RAD;
             const angle = Math.PI / 2 + wing * (BUTTERFLY_WING_INNER_RAD + spread + extraRotationRad);
+            // The fold launches straight down, then curls out to this bullet's own
+            // fan offset over the return — inner bullets barely, outer bullets far —
+            // so the wing slowly aims across the lower screen (mirrored per side).
+            const fanOffset = BUTTERFLY_RETURN_BASE_RAD + t * BUTTERFLY_RETURN_FAN_RAD;
             this.spawnEnemyBullet(boss.x, boss.y, angle, BUTTERFLY_INITIAL_SPEED, wing < 0 ? ctx.texA : ctx.texB, {
               mode: 'decelPauseReverse',
               acceleration: BUTTERFLY_DECELERATION,
               minSpeed: BUTTERFLY_MIN_SPEED,
               pauseMs: BUTTERFLY_PAUSE_MS,
               reverseSpeed: BUTTERFLY_REVERSE_SPEED,
-              reverseRotationRad: wing * BUTTERFLY_REVERSE_ROTATION_RAD,
+              reverseAngleRad: Math.PI / 2, // launch straight down, then curl out
+              reverseCurlRad: (wing * fanOffset) / returnSec, // total curl over the return = fanOffset
+              reverseDurationMs: BUTTERFLY_RETURN_MS,
               reverseTex,
             });
           }
@@ -1553,6 +1727,124 @@ class BulletHellScene extends Phaser.Scene {
         });
       };
       fireVolley();
+    });
+  }
+
+  // Celestial Bloom — Form (all petals draw on together, one sample each per step)
+  // -> Bloom (grow + rotate the whole flower into a wall) -> Hold -> Release
+  // (straight out, or along the petal tangents as swirling bands). Petals are
+  // 'formation' bullets: each is positioned every frame from a single shared,
+  // tweened transform, so the whole flower scales/rotates with one tween. Hard
+  // mode starts a second flower forming the instant the first releases.
+  private bloomSkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('bloom');
+    const samples = hard ? BLOOM_PETAL_SAMPLES_HARD : BLOOM_PETAL_SAMPLES;
+
+    // Petal slots grouped per petal (in sample order) so every petal can draw on
+    // in parallel — one sample per petal per step, delay between successive
+    // samples of the same petal. Skips samples that land on the flower center.
+    type Slot = { baseAngleRad: number; baseRadius: number; tangentRad: number; tex: string };
+    const buildPetals = (): Slot[][] => {
+      const perPetal: Slot[][] = [];
+      for (let p = 0; p < BLOOM_PETALS; p++) {
+        const petalRadiusMult = p % 2 == 0 ? 1 : 0.8;
+        const pa = (p / BLOOM_PETALS) * Math.PI * 2;
+        const ox = Math.cos(pa) * BLOOM_PETAL_RADIUS * petalRadiusMult;
+        const oy = Math.sin(pa) * BLOOM_PETAL_RADIUS * petalRadiusMult;
+        const petalSlots: Slot[] = [];
+        for (let s = 0; s < samples; s++) {
+          const phi = (s % 2 == 1 ? 1 : -1) * (s / samples) * Math.PI * 2 + pa;
+          const lx = ox + Math.cos(phi) * BLOOM_PETAL_RADIUS * petalRadiusMult;
+          const ly = oy + Math.sin(phi) * BLOOM_PETAL_RADIUS * petalRadiusMult;
+          const baseRadius = Math.hypot(lx, ly);
+          if (baseRadius < BLOOM_MIN_RADIUS) continue;
+          petalSlots.push({
+            baseAngleRad: Math.atan2(ly, lx),
+            baseRadius,
+            tangentRad: phi + Math.PI / 2, // tangent to this petal circle at phi
+            tex: p % 2 === 0 ? ctx.texA : ctx.texB,
+          });
+        }
+        perPetal.push(petalSlots);
+      }
+      return perPetal;
+    };
+
+    this.withStationaryBoss(boss, W / 2, (finish) => {
+      // One full Form -> Bloom -> Hold -> Release cycle; onReleased fires the
+      // moment the petals launch (so a hard second flower can start forming then).
+      const runOneBloom = (onReleased: () => void) => {
+        const formation: FlowerFormation = { cx: boss.x, cy: boss.y, scale: BLOOM_FORM_SCALE, rotation: 0, released: false };
+        const petals: Sprite[] = [];
+        const perPetal = buildPetals();
+        const maxLen = perPetal.reduce((m, a) => Math.max(m, a.length), 0);
+
+        const release = () => {
+          if (!boss.active || this.state !== 'playing') return; // boss died — bullets already cleared
+          const tangent = Phaser.Math.RND.frac() < 0.5; // branch: straight out, or petal-tangent bands
+          formation.released = true;
+          for (const b of petals) {
+            if (!b.active) continue;
+            const m = b.getData('motion') as MotionState | undefined;
+            const dir = (tangent ? (m?.tangentRad ?? 0) : (m?.baseAngleRad ?? 0)) + formation.rotation;
+            b.setVelocity(Math.cos(dir) * BLOOM_RELEASE_SPEED, Math.sin(dir) * BLOOM_RELEASE_SPEED);
+            (b.body as Phaser.Physics.Arcade.Body).enable = true;
+            b.setData('motion', undefined);
+          }
+          onReleased();
+        };
+
+        const bloom = () => {
+          if (!boss.active || this.state !== 'playing') return;
+          // Grow + rotate the whole flower into a wall; Back.easeOut overshoots
+          // the scale slightly for the appealing "pop" as it blooms.
+          this.tweens.add({
+            targets: formation,
+            scale: BLOOM_FULL_SCALE,
+            rotation: BLOOM_ROTATE_RAD,
+            duration: BLOOM_GROW_MS,
+            ease: 'Back.easeOut',
+            onComplete: () => this.time.delayedCall(BLOOM_HOLD_MS, release),
+          });
+        };
+
+        // Form: every petal adds its sample #step this step (all in parallel).
+        let step = 0;
+        const spawnStep = () => {
+          if (!boss.active || this.state !== 'playing') return;
+          for (const petalSlots of perPetal) {
+            const slot = petalSlots[step];
+            if (!slot) continue;
+            const r = slot.baseRadius * BLOOM_FORM_SCALE;
+            const b = this.spawnEnemyBullet(
+              formation.cx + Math.cos(slot.baseAngleRad) * r,
+              formation.cy + Math.sin(slot.baseAngleRad) * r,
+              0,
+              0,
+              slot.tex,
+              {
+                mode: 'formation',
+                formation,
+                baseAngleRad: slot.baseAngleRad,
+                baseRadius: slot.baseRadius,
+                tangentRad: slot.tangentRad,
+              },
+            );
+            if (b) petals.push(b);
+          }
+          step += 1;
+          if (step < maxLen) this.time.delayedCall(BLOOM_FORM_STEP_MS, spawnStep);
+          else bloom();
+        };
+        spawnStep();
+      };
+
+      const finishAll = () => this.time.delayedCall(500, () => {
+        finish();
+        done();
+      });
+      // Hard: a second flower starts forming the instant the first releases.
+      runOneBloom(() => (hard ? runOneBloom(finishAll) : finishAll()));
     });
   }
 
@@ -1612,6 +1904,300 @@ class BulletHellScene extends Phaser.Scene {
         this.time.delayedCall(PRISM_RECOVERY_MS, done);
       });
     });
+  }
+
+  // Lunar Mandala — concentric rings of 'formation' bullets (one FlowerFormation
+  // per ring) with 1-2 carved gaps. After a charge + hold, the rings counter-rotate
+  // (inner faster), and every ring's shared center descends toward a snapshot of
+  // the player while the whole mandala grows — the gaps sweep across the field so
+  // there's no static safe lane. Mid-way through, slow oversized aimed shots pile
+  // on so the player can't sit still. The rings dissolve outward at the end.
+  private mandalaSkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('mandala');
+    const rings = hard ? MANDALA_RINGS_HARD : MANDALA_RINGS;
+    const tier = boss.getData('tier') as number;
+    const palette = BOSS_PALETTES[(tier - 1) % BOSS_PALETTES.length];
+    const bigTex = this.bigBulletTexture(palette[0]);
+
+    this.withStationaryBoss(boss, W / 2, (finish) => {
+      const originX = boss.x;
+      const originY = boss.y;
+
+      // Charge — a scale pulse telegraphing the mandala before it draws.
+      const charge = this.tweens.add({ targets: boss, scale: 1.14, yoyo: true, repeat: -1, duration: 150 });
+      this.time.delayedCall(MANDALA_CHARGE_MS, () => {
+        charge.stop();
+        if (!boss.active || this.state !== 'playing') {
+          finish();
+          done();
+          return;
+        }
+        boss.setScale(1);
+
+        // Build the rings around the fixed origin (upper screen, at the boss).
+        type Ring = { formation: FlowerFormation; bullets: Sprite[]; angular: number; dir: number };
+        const ringData: Ring[] = [];
+        for (let r = 0; r < rings; r++) {
+          const radius = MANDALA_INNER_RADIUS + r * MANDALA_RADIUS_STEP;
+          const formation: FlowerFormation = { cx: originX, cy: originY, scale: 1, rotation: 0, released: false };
+          const count = Phaser.Math.Clamp(
+            Math.round((2 * Math.PI * radius) / MANDALA_ARC_SPACING),
+            12,
+            MANDALA_MAX_RING_BULLETS,
+          );
+          const gap = (Math.PI * 2) / count;
+          // Carve 1-2 contiguous gaps at spread-out, per-ring-random positions so
+          // no two rings' gaps line up (and drift apart as the rings counter-rotate).
+          const skip = new Set<number>();
+          const gaps = Phaser.Math.Between(MANDALA_GAPS_MIN, MANDALA_GAPS_MAX);
+          const half = Math.floor(MANDALA_GAP_BULLETS / 2);
+          for (let g = 0; g < gaps; g++) {
+            const slot = Math.floor(count / gaps);
+            const base = g * slot + Phaser.Math.Between(0, Math.max(0, slot - MANDALA_GAP_BULLETS));
+            for (let k = -half; k <= half; k++) skip.add((((base + k) % count) + count) % count);
+          }
+          const tex = r % 2 === 0 ? ctx.texA : ctx.texB;
+          const bullets: Sprite[] = [];
+          for (let i = 0; i < count; i++) {
+            if (skip.has(i)) continue;
+            const baseAngle = i * gap;
+            const b = this.spawnEnemyBullet(
+              originX + Math.cos(baseAngle) * radius,
+              originY + Math.sin(baseAngle) * radius,
+              0,
+              0,
+              tex,
+              { mode: 'formation', formation, baseAngleRad: baseAngle, baseRadius: radius },
+            );
+            if (b) bullets.push(b);
+          }
+          // Innermost ring (r=0) spins fastest; direction alternates per ring.
+          const angular = MANDALA_ANGULAR_BASE + (rings - 1 - r) * MANDALA_ANGULAR_STEP;
+          ringData.push({ formation, bullets, angular, dir: r % 2 === 0 ? 1 : -1 });
+        }
+
+        // Hold so the gaps are readable, then start the descent + rotation.
+        this.time.delayedCall(MANDALA_HOLD_MS, () => {
+          if (!boss.active || this.state !== 'playing') {
+            finish();
+            done();
+            return;
+          }
+          const targetX = Phaser.Math.Clamp(this.ship.x, 80, W - 80);
+          const targetY = Phaser.Math.Clamp(this.ship.y, H * 0.35, H * 0.85);
+          const contractSec = MANDALA_CONTRACT_MS / 1000;
+          for (const ring of ringData) {
+            // Shared descending center + growing scale (identical across rings so
+            // they stay concentric); a separate linear tween spins each ring.
+            this.tweens.add({
+              targets: ring.formation,
+              cx: targetX,
+              cy: targetY,
+              scale: MANDALA_SCALE_END,
+              duration: MANDALA_CONTRACT_MS,
+              ease: 'Sine.easeIn',
+            });
+            this.tweens.add({
+              targets: ring.formation,
+              rotation: ring.dir * ring.angular * contractSec,
+              duration: MANDALA_CONTRACT_MS,
+              ease: 'Linear',
+            });
+          }
+
+          // Second half: slow, oversized aimed shots that force the player to move.
+          const bigShots = hard ? MANDALA_BIG_SHOTS_HARD : MANDALA_BIG_SHOTS;
+          for (let s = 0; s < bigShots; s++) {
+            this.time.delayedCall(MANDALA_CONTRACT_MS / 2 + s * MANDALA_BIG_GAP_MS, () => {
+              if (!boss.active || this.state !== 'playing') return;
+              const angle = Phaser.Math.Angle.Between(boss.x, boss.y, this.ship.x, this.ship.y);
+              const b = this.spawnEnemyBullet(boss.x, boss.y + 20, angle, MANDALA_BIG_SPEED, bigTex);
+              // Explicit offset so re-circling a 20px body stays centered.
+              if (b) (b.body as Phaser.Physics.Arcade.Body).setCircle(MANDALA_BIG_RADIUS, 0, 0);
+            });
+          }
+
+          // Dissolve: release every ring bullet straight outward, then finish.
+          this.time.delayedCall(MANDALA_CONTRACT_MS, () => {
+            for (const ring of ringData) {
+              ring.formation.released = true;
+              for (const b of ring.bullets) {
+                if (!b.active) continue;
+                const m = b.getData('motion') as MotionState | undefined;
+                const dir = (m?.baseAngleRad ?? 0) + ring.formation.rotation;
+                b.setVelocity(Math.cos(dir) * MANDALA_RELEASE_SPEED, Math.sin(dir) * MANDALA_RELEASE_SPEED);
+                b.setData('motion', undefined);
+              }
+            }
+            this.time.delayedCall(400, () => {
+              finish();
+              done();
+            });
+          });
+        });
+      });
+    });
+  }
+
+  // Starweaver's Loom — bullet "threads" laid along screen-spanning Bezier curves.
+  // The threads draw on (weave), the curves undulate in place as the telegraph, a
+  // red flash cues release, then each bullet fires perpendicular to its curve
+  // (alternating left/right normal) with curves releasing 0.15s apart — a
+  // crosshatch rain. Screen-anchored, so the boss keeps strafing ("drawing").
+  private loomSkill(boss: Sprite, ctx: SkillCtx, done: () => void) {
+    const hard = ctx.hardIds.has('loom');
+    const curveCount = hard ? LOOM_CURVES_HARD : LOOM_CURVES;
+
+    // Quadratic Bezier point + tangent angle, computed directly (no arc-length
+    // cache) so mutating the control point mid-undulation just works.
+    type Pt = { x: number; y: number };
+    const quad = (p0: Pt, c: Pt, p2: Pt, t: number): Pt => {
+      const mt = 1 - t;
+      return {
+        x: mt * mt * p0.x + 2 * mt * t * c.x + t * t * p2.x,
+        y: mt * mt * p0.y + 2 * mt * t * c.y + t * t * p2.y,
+      };
+    };
+    const quadTangent = (p0: Pt, c: Pt, p2: Pt, t: number): number => {
+      const mt = 1 - t;
+      const dx = 2 * mt * (c.x - p0.x) + 2 * t * (p2.x - c.x);
+      const dy = 2 * mt * (c.y - p0.y) + 2 * t * (p2.y - c.y);
+      return Math.atan2(dy, dx);
+    };
+
+    type Thread = { p0: Pt; p2: Pt; c: Pt; cBaseY: number; phase: number; n: number; bullets: Sprite[] };
+    const threads: Thread[] = [];
+    for (let k = 0; k < curveCount; k++) {
+      const f = curveCount > 1 ? k / (curveCount - 1) : 0.5;
+      // Left endpoints run top->bottom, right endpoints bottom->top, so adjacent
+      // threads cross — the woven look. Control bow alternates up/down.
+      const leftY = Phaser.Math.Linear(LOOM_EDGE_TOP, LOOM_EDGE_BOT, f);
+      const rightY = Phaser.Math.Linear(LOOM_EDGE_BOT, LOOM_EDGE_TOP, f);
+      const cy = (leftY + rightY) / 2 + (k % 2 === 0 ? -1 : 1) * LOOM_CTRL_BOW;
+      const p0: Pt = { x: 6, y: leftY };
+      const p2: Pt = { x: W - 6, y: rightY };
+      const dist = Math.hypot(p2.x - p0.x, p2.y - p0.y);
+      const n = Phaser.Math.Clamp(Math.round(dist / LOOM_BULLET_SPACING), LOOM_MIN_BULLETS, LOOM_MAX_BULLETS);
+      threads.push({ p0, p2, c: { x: W / 2, y: cy }, cBaseY: cy, phase: k * (Math.PI / 3), n, bullets: [] });
+    }
+
+    const gfx = this.add.graphics().setDepth(1);
+    const drawPreview = () => {
+      gfx.clear();
+      gfx.lineStyle(2, 0xffffff, LOOM_PREVIEW_ALPHA);
+      for (const th of threads) {
+        gfx.beginPath();
+        gfx.moveTo(th.p0.x, th.p0.y);
+        const steps = 24;
+        for (let s = 1; s <= steps; s++) {
+          const p = quad(th.p0, th.c, th.p2, s / steps);
+          gfx.lineTo(p.x, p.y);
+        }
+        gfx.strokePath();
+      }
+    };
+    drawPreview();
+
+    const cleanup = () => {
+      if (gfx.active) gfx.destroy();
+    };
+
+    // Fire the threads: flash, then flip each curve's parked ghosts to launch,
+    // staggered per curve. updateBulletMotion launches them along their stored
+    // (base-curve) normal the next frame.
+    const release = () => {
+      if (!boss.active || this.state !== 'playing') {
+        cleanup();
+        done();
+        return;
+      }
+      const flash = this.add.rectangle(W / 2, H / 2, W, H, 0xff3355).setDepth(8).setAlpha(0.5);
+      this.tweens.add({ targets: flash, alpha: 0, duration: LOOM_FLASH_MS, onComplete: () => flash.destroy() });
+      threads.forEach((th, k) => {
+        this.time.delayedCall(k * LOOM_CURVE_STAGGER_MS, () => {
+          for (const b of th.bullets) {
+            if (!b.active) continue;
+            const m = b.getData('motion') as MotionState | undefined;
+            if (m) m.launchAtMs = this.time.now;
+          }
+        });
+      });
+      this.time.delayedCall((threads.length - 1) * LOOM_CURVE_STAGGER_MS + 400, () => {
+        cleanup();
+        done();
+      });
+    };
+
+    // Undulate the curves in place (visual telegraph). Ghost bodies are disabled,
+    // so repositioning them each frame is free; the tween ends snapped back to the
+    // base curve so each stored launch normal still matches its bullet's position.
+    const undulate = () => {
+      if (!boss.active || this.state !== 'playing') {
+        cleanup();
+        done();
+        return;
+      }
+      const wob = { p: 0 };
+      const reposition = () => {
+        for (const th of threads) {
+          for (const b of th.bullets) {
+            const t = (b.getData('loomT') as number) ?? 0;
+            const p = quad(th.p0, th.c, th.p2, t);
+            if (b.active) b.setPosition(p.x, p.y);
+          }
+        }
+        drawPreview();
+      };
+      this.tweens.add({
+        targets: wob,
+        p: Math.PI * 4,
+        duration: LOOM_UNDULATE_MS,
+        ease: 'Sine.easeInOut',
+        onUpdate: () => {
+          for (const th of threads) th.c.y = th.cBaseY + Math.sin(wob.p + th.phase) * LOOM_UNDULATE_AMP;
+          reposition();
+        },
+        onComplete: () => {
+          for (const th of threads) th.c.y = th.cBaseY; // snap back to base curve
+          reposition();
+          release();
+        },
+      });
+    };
+
+    // Weave: one bullet per thread per step, so all curves draw on in parallel.
+    const maxN = threads.reduce((m, th) => Math.max(m, th.n), 0);
+    let step = 0;
+    const weave = () => {
+      if (!boss.active || this.state !== 'playing') {
+        cleanup();
+        done();
+        return;
+      }
+      for (const th of threads) {
+        if (step >= th.n) continue;
+        const t = th.n > 1 ? step / (th.n - 1) : 0.5;
+        const p = quad(th.p0, th.c, th.p2, t);
+        const tangent = quadTangent(th.p0, th.c, th.p2, t);
+        // Alternate the perpendicular so a thread splits into a left-normal and a
+        // right-normal comb when it releases — the crosshatch.
+        const dir = tangent + (step % 2 === 0 ? Math.PI / 2 : -Math.PI / 2);
+        const b = this.spawnEnemyBullet(p.x, p.y, 0, 0, step % 2 === 0 ? ctx.texA : ctx.texB, {
+          mode: 'delayed',
+          launchAtMs: Number.MAX_SAFE_INTEGER, // parked until release flips it to now
+          launchAngleRad: dir,
+          launchSpeed: LOOM_BULLET_SPEED,
+        });
+        if (b) {
+          b.setData('loomT', t);
+          th.bullets.push(b);
+        }
+      }
+      step += 1;
+      if (step < maxN) this.time.delayedCall(LOOM_WEAVE_STEP_MS, weave);
+      else undulate();
+    };
+    weave();
   }
 
   private updateBossBar() {
@@ -1745,7 +2331,7 @@ class BulletHellScene extends Phaser.Scene {
       this.toast(`+${KILL_SCORE}`, '#ffd93d');
     } else if (key === 'item_hp') {
       this.lives += 1;
-      this.livesText.setText('♥'.repeat(this.lives));
+      this.livesText.setText('♥ '.repeat(this.lives));
       this.toast('+1 ♥', '#ff5d8f');
     }
     this.updatePowerText();
@@ -1798,7 +2384,7 @@ class BulletHellScene extends Phaser.Scene {
     this.tweens.add({ targets: this.borderFlash, alpha: 0, duration: 500, ease: 'Sine.easeOut' });
     if (navigator.vibrate) navigator.vibrate([70, 40, 70]);
     this.lives -= 1;
-    this.livesText.setText('♥'.repeat(Math.max(0, this.lives)));
+    this.livesText.setText('♥ '.repeat(Math.max(0, this.lives)));
     if (this.lives <= 0) {
       this.die();
       return;
