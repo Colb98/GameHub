@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentPrincipal } from '../common/decorators';
 import { RequireUserGuard } from '../common/guards';
 import { Principal } from '../common/types';
+import { DeveloperRequestDto } from './dto';
 import { UsersService } from './users.service';
 
 @Controller('me')
@@ -12,6 +13,14 @@ export class UsersController {
   @Get()
   me(@CurrentPrincipal() p: Principal) {
     return this.users.profile(p.userId!);
+  }
+
+  @Post('developer-request')
+  requestDeveloper(
+    @CurrentPrincipal() p: Principal,
+    @Body() dto: DeveloperRequestDto,
+  ) {
+    return this.users.requestDeveloper(p.userId!, dto.message);
   }
 
   @Get('scores')

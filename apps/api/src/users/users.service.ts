@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { pickTranslation, toGameCard } from '../games/games.service';
 
@@ -20,7 +25,42 @@ export class UsersService {
       },
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    // Surface the applicant's latest developer-role application so the client
+    // can render the right "Become a developer" state without a second call.
+    const devRequest = await this.prisma.developerRequest.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        status: true,
+        message: true,
+        reviewReason: true,
+        createdAt: true,
+        reviewedAt: true,
+      },
+    });
+    return { ...user, developerRequest: devRequest };
+  }
+
+  /** A PLAYER applies for the DEVELOPER role. */
+  async requestDeveloper(userId: string, message?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'PLAYER') {
+      throw new BadRequestException('You already have developer access');
+    }
+    const pending = await this.prisma.developerRequest.findFirst({
+      where: { userId, status: 'PENDING' },
+    });
+    if (pending) {
+      throw new ConflictException('You already have a pending request');
+    }
+    return this.prisma.developerRequest.create({
+      data: { userId, message: message?.trim() || null },
+      select: { status: true, message: true, createdAt: true },
+    });
   }
 
   async bestScores(userId: string, locale: string) {

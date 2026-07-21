@@ -44,6 +44,12 @@ enum CommentStatus {
   HIDDEN
 }
 
+enum DeveloperRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String?        @unique
@@ -61,6 +67,8 @@ model User {
   comments      Comment[]
   ratings       Rating[]
   favorites     Favorite[]
+  devRequests       DeveloperRequest[] @relation("UserDeveloperRequests")
+  reviewedRequests  DeveloperRequest[] @relation("ReviewedDeveloperRequests")
 }
 
 model Identity {
@@ -221,4 +229,25 @@ model Favorite {
   createdAt DateTime @default(now())
 
   @@id([userId, gameId])
+}
+
+/// A PLAYER's application to be granted the DEVELOPER role. Kept as history:
+/// a rejected applicant can re-apply, adding another row.
+model DeveloperRequest {
+  id           String                 @id @default(cuid())
+  userId       String
+  user         User                   @relation("UserDeveloperRequests", fields: [userId], references: [id], onDelete: Cascade)
+  status       DeveloperRequestStatus @default(PENDING)
+  /// Optional pitch from the applicant (what they want to publish, portfolio…)
+  message      String?
+  /// Admin's note when rejecting
+  reviewReason String?
+  reviewedById String?
+  reviewedBy   User?                  @relation("ReviewedDeveloperRequests", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }

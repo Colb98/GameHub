@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CommentStatus, GameStatus, Role } from '@prisma/client';
+import { CommentStatus, GameStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -149,6 +149,68 @@ export class AdminService {
       data: { role },
       select: { id: true, email: true, displayName: true, role: true },
     });
+  }
+
+  listDeveloperRequests() {
+    return this.prisma.developerRequest.findMany({
+      where: { status: 'PENDING' },
+      include: {
+        user: { select: { id: true, displayName: true, email: true, role: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  private async pendingRequest(id: string) {
+    const request = await this.prisma.developerRequest.findUnique({
+      where: { id },
+      include: { user: { select: { id: true, role: true } } },
+    });
+    if (!request) throw new NotFoundException('Request not found');
+    if (request.status !== 'PENDING') {
+      throw new BadRequestException('This request has already been reviewed');
+    }
+    return request;
+  }
+
+  /** Grants the DEVELOPER role and marks the application approved. */
+  async approveDeveloperRequest(id: string, reviewerId: string) {
+    const request = await this.pendingRequest(id);
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      this.prisma.developerRequest.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          reviewedById: reviewerId,
+          reviewedAt: new Date(),
+        },
+      }),
+    ];
+    // Never demote someone who is already MODERATOR/ADMIN.
+    if (request.user.role === 'PLAYER') {
+      ops.push(
+        this.prisma.user.update({
+          where: { id: request.userId },
+          data: { role: 'DEVELOPER' },
+        }),
+      );
+    }
+    await this.prisma.$transaction(ops);
+    return { ok: true };
+  }
+
+  async rejectDeveloperRequest(id: string, reviewerId: string, reason: string) {
+    await this.pendingRequest(id);
+    await this.prisma.developerRequest.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        reviewReason: reason,
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+      },
+    });
+    return { ok: true };
   }
 
   async deleteScore(scoreId: string) {

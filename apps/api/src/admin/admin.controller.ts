@@ -18,7 +18,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Roles } from '../common/decorators';
+import { CurrentPrincipal, Roles } from '../common/decorators';
+import { Principal } from '../common/types';
 import { AdminService } from './admin.service';
 
 class RejectDto {
@@ -103,6 +104,31 @@ export class AdminController {
   @Roles(Role.ADMIN)
   setRole(@Param('id') id: string, @Body() dto: SetRoleDto) {
     return this.admin.setRole(id, dto.role);
+  }
+
+  @Get('developer-requests')
+  @Roles(Role.ADMIN)
+  listDeveloperRequests() {
+    return this.admin.listDeveloperRequests();
+  }
+
+  @Post('developer-requests/:id/approve')
+  @Roles(Role.ADMIN)
+  approveDeveloperRequest(
+    @Param('id') id: string,
+    @CurrentPrincipal() p: Principal,
+  ) {
+    return this.admin.approveDeveloperRequest(id, p.userId!);
+  }
+
+  @Post('developer-requests/:id/reject')
+  @Roles(Role.ADMIN)
+  rejectDeveloperRequest(
+    @Param('id') id: string,
+    @Body() dto: RejectDto,
+    @CurrentPrincipal() p: Principal,
+  ) {
+    return this.admin.rejectDeveloperRequest(id, p.userId!, dto.reason);
   }
 
   @Delete('scores/:id')

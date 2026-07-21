@@ -7,6 +7,8 @@ import { api } from '@/lib/client-api';
 import type { GameCard as GameCardType, UserProfile } from '@/lib/types';
 import { GameCard } from '@/components/GameCard';
 
+const ROLE_RANK = { PLAYER: 0, DEVELOPER: 1, MODERATOR: 2, ADMIN: 3 } as const;
+
 interface BestScore {
   gameId: string;
   slug: string;
@@ -58,6 +60,8 @@ export default function ProfilePage() {
           </p>
         </div>
       </div>
+
+      <DeveloperCard user={user} t={t} />
 
       <section className="space-y-3">
         <h2 className="text-xl font-bold">🏅 {t('bestScores')}</h2>
@@ -114,6 +118,49 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function DeveloperCard({
+  user,
+  t,
+}: {
+  user: UserProfile;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  // Developers and above: link straight to Studio.
+  if (ROLE_RANK[user.role] >= ROLE_RANK.DEVELOPER) {
+    return (
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h2 className="font-display font-bold text-ink">🛠 {t('studioCardTitle')}</h2>
+          <p className="text-sm text-body">{t('studioCardBody')}</p>
+        </div>
+        <Link href="/studio" className="btn-ghost">
+          {t('studioCardCta')}
+        </Link>
+      </div>
+    );
+  }
+
+  const status = user.developerRequest?.status;
+  const note =
+    status === 'PENDING'
+      ? t('devPending')
+      : status === 'REJECTED'
+        ? t('devRejected')
+        : t('becomeDevBody');
+
+  return (
+    <div className="card flex flex-wrap items-center justify-between gap-3 p-5">
+      <div>
+        <h2 className="font-display font-bold text-ink">🚀 {t('becomeDevTitle')}</h2>
+        <p className="text-sm text-body">{note}</p>
+      </div>
+      <Link href="/developer" className="btn">
+        {status === 'PENDING' || status === 'REJECTED' ? t('devView') : t('becomeDevCta')}
+      </Link>
     </div>
   );
 }

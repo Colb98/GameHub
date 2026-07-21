@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "dev:up": "node scripts/dev-up.mjs",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

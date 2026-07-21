@@ -48,12 +48,34 @@ export interface CommentItem {
   user: { id: string; displayName: string; avatarUrl: string | null };
 }
 
+export type Role = 'PLAYER' | 'DEVELOPER' | 'MODERATOR' | 'ADMIN';
+
+export type DeveloperRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface DeveloperRequest {
+  status: DeveloperRequestStatus;
+  message: string | null;
+  reviewReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
 export interface UserProfile {
   id: string;
   email: string | null;
   displayName: string;
   avatarUrl: string | null;
-  role: 'PLAYER' | 'DEVELOPER' | 'MODERATOR' | 'ADMIN';
+  role: Role;
+  /** The user's latest developer-role application, if they ever made one */
+  developerRequest: DeveloperRequest | null;
+}
+
+export interface AdminDeveloperRequest {
+  id: string;
+  message: string | null;
+  reviewReason: string | null;
+  createdAt: string;
+  user: { id: string; displayName: string; email: string | null; role: Role };
 }
 
 export interface SubmitScoreResult {
