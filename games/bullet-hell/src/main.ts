@@ -210,27 +210,34 @@ const BLOOM_RELEASE_SPEED = 135;
 // rotation tween for its own speed/direction, all share the same descending
 // center + growing scale). The second half adds slow, oversized aimed shots so
 // the player can't just park in one gap.
-const MANDALA_RINGS = 3;
-const MANDALA_RINGS_HARD = 4;
-const MANDALA_INNER_RADIUS = 58; // innermost ring, at formation scale 1
-const MANDALA_RADIUS_STEP = 46; // each ring further out adds this
+const MANDALA_RINGS = 6;
+const MANDALA_RINGS_HARD = 9;
+const MANDALA_INNER_RADIUS = 38; // innermost ring, at formation scale 1
+const MANDALA_RADIUS_STEP = 24; // each ring further out adds this
 const MANDALA_ARC_SPACING = 24; // target px between adjacent bullets on a ring
 const MANDALA_MAX_RING_BULLETS = 64;
 const MANDALA_GAPS_MIN = 1; // each ring omits 1-2 contiguous arcs as escape gates
 const MANDALA_GAPS_MAX = 2;
 const MANDALA_GAP_BULLETS = 4; // bullets skipped per gap
 const MANDALA_CHARGE_MS = 600; // boss charge (scale pulse) before the rings draw
+const MANDALA_DRAW_MS = 600; // ring bullets pop in one-by-one over this sweep (all rings share the window)
 const MANDALA_HOLD_MS = 300; // hold so the player can read the gaps before motion
-const MANDALA_CONTRACT_MS = 3200; // expand + descend phase
+const MANDALA_CONTRACT_MS = 5200; // expand + descend phase
 const MANDALA_SCALE_END = 1.75; // rings grow from 1x to this while descending
-const MANDALA_ANGULAR_BASE = 0.5; // rad/s of the outermost ring
+const MANDALA_ANGULAR_BASE = 0.3; // rad/s of the outermost ring
 const MANDALA_ANGULAR_STEP = 0.28; // + per ring inward — inner rings spin faster
 const MANDALA_RELEASE_SPEED = 150; // outward scatter when the mandala dissolves
-const MANDALA_BIG_SHOTS = 3; // second-half aimed pressure shots
-const MANDALA_BIG_SHOTS_HARD = 5;
-const MANDALA_BIG_GAP_MS = 480;
-const MANDALA_BIG_SPEED = 55; // ~0.2x the normal aimed speed — slow, forces movement
-const MANDALA_BIG_RADIUS = 10; // 2x the normal bullet radius (20px texture + body)
+const MANDALA_BIG_SHOTS = 7; // second-half aimed pressure shots
+const MANDALA_BIG_SHOTS_HARD = 10;
+// Kept small on purpose: at MANDALA_BIG_SPEED, consecutive shots spawn
+// ~(SPEED * GAP_MS/1000)px apart, so a gap below the 2*MANDALA_BIG_RADIUS
+// diameter (60px → ~570ms) lets them partly overlap into a dense stream
+// instead of reading as isolated one-by-one shots. This also keeps the whole
+// volley inside the contract's second half so no shot bleeds into the next skill.
+const MANDALA_BIG_GAP_MS = 330;
+const MANDALA_BIG_SPEED = 105; // ~0.2x the normal aimed speed — slow, forces movement
+const MANDALA_BIG_RADIUS = 25; // 2x the normal bullet radius (20px texture + body)
+const MANDALA_BIG_AIM_JITTER_DEG = 25; // ± random scatter off the player snapshot per shot
 
 // Starweaver's Loom — glowing bullet "threads" laid along Bezier curves that span
 // the screen edge-to-edge. The threads draw on (weave), the curves undulate in
@@ -243,15 +250,15 @@ const LOOM_CURVES_HARD = 6;
 const LOOM_EDGE_TOP = 130; // vertical band the curve endpoints span
 const LOOM_EDGE_BOT = 560;
 const LOOM_BULLET_SPACING = 30; // target px between bullets along a curve
-const LOOM_MIN_BULLETS = 12;
-const LOOM_MAX_BULLETS = 26;
+const LOOM_MIN_BULLETS = 36;
+const LOOM_MAX_BULLETS = 48;
 const LOOM_CTRL_BOW = 90; // control-point vertical bow (alternates sign per curve)
 const LOOM_WEAVE_STEP_MS = 26; // delay between successive bullets drawing on
 const LOOM_UNDULATE_MS = 1500; // curves undulate in place (telegraph)
 const LOOM_UNDULATE_AMP = 22; // control-point wobble amplitude
 const LOOM_FLASH_MS = 240; // red flash cueing release
 const LOOM_CURVE_STAGGER_MS = 150; // 0.15s between successive curves releasing
-const LOOM_BULLET_SPEED = 205; // perpendicular rain speed
+const LOOM_BULLET_SPEED = 84; // perpendicular rain speed
 const LOOM_PREVIEW_ALPHA = 0.16; // faint preview curve alpha
 
 type SkillId =
@@ -503,6 +510,7 @@ interface MotionState {
   baseAngleRad?: number; // slot angle at unit scale, before formation.rotation
   baseRadius?: number; // slot radius at unit scale, before formation.scale
   tangentRad?: number; // petal tangent direction (for the tangent-band release)
+  revealAtMs?: number; // stay hidden + non-colliding until this.time.now hits it (mandala draw-in)
 }
 
 class BulletHellScene extends Phaser.Scene {
@@ -713,9 +721,9 @@ class BulletHellScene extends Phaser.Scene {
     const key = `ebbig_${color.toString(16)}`;
     if (!this.textures.exists(key)) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
-      g.fillStyle(color).fillCircle(10, 10, 10);
-      g.fillStyle(0xffffff, 0.85).fillCircle(10, 10, 4);
-      g.generateTexture(key, 20, 20);
+      g.fillStyle(color).fillCircle(MANDALA_BIG_RADIUS, MANDALA_BIG_RADIUS, MANDALA_BIG_RADIUS);
+      g.fillStyle(0xffffff, 0.85).fillCircle(MANDALA_BIG_RADIUS, MANDALA_BIG_RADIUS, MANDALA_BIG_RADIUS * 0.4);
+      g.generateTexture(key, MANDALA_BIG_RADIUS * 2, MANDALA_BIG_RADIUS * 2);
       g.destroy();
     }
     return key;
@@ -1073,6 +1081,12 @@ class BulletHellScene extends Phaser.Scene {
       const r = (motion.baseRadius ?? 0) * f.scale;
       bullet.setVelocity(0, 0);
       bullet.setPosition(f.cx + Math.cos(a) * r, f.cy + Math.sin(a) * r);
+      // Draw-in: a bullet spawned hidden pops in (and starts colliding) once its
+      // staggered reveal time arrives — the mandala unfurls instead of snapping in.
+      if (motion.revealAtMs !== undefined && !bullet.visible && nowMs >= motion.revealAtMs) {
+        bullet.setVisible(true);
+        body.enable = true;
+      }
       return;
     }
 
@@ -1957,27 +1971,46 @@ class BulletHellScene extends Phaser.Scene {
             for (let k = -half; k <= half; k++) skip.add((((base + k) % count) + count) % count);
           }
           const tex = r % 2 === 0 ? ctx.texA : ctx.texB;
+          // Draw-in sweep: reveal this ring's bullets one-by-one instead of all at
+          // once. Every ring spans the same MANDALA_DRAW_MS window (they "appear at
+          // the same time"), but the sweep runs the opposite way around on alternate
+          // rings so the mandala unfurls rather than snapping into existence.
+          const sweepForward = r % 2 === 0;
           const bullets: Sprite[] = [];
           for (let i = 0; i < count; i++) {
             if (skip.has(i)) continue;
             const baseAngle = i * gap;
+            const progress = sweepForward ? i / count : (count - 1 - i) / count;
             const b = this.spawnEnemyBullet(
               originX + Math.cos(baseAngle) * radius,
               originY + Math.sin(baseAngle) * radius,
               0,
               0,
               tex,
-              { mode: 'formation', formation, baseAngleRad: baseAngle, baseRadius: radius },
+              {
+                mode: 'formation',
+                formation,
+                baseAngleRad: baseAngle,
+                baseRadius: radius,
+                revealAtMs: this.time.now + progress * MANDALA_DRAW_MS,
+              },
             );
-            if (b) bullets.push(b);
+            if (b) {
+              // Hidden and non-colliding until updateBulletMotion pops it in at its
+              // staggered reveal time — cheaper than a timer per bullet.
+              b.setVisible(false);
+              (b.body as Phaser.Physics.Arcade.Body).enable = false;
+              bullets.push(b);
+            }
           }
           // Innermost ring (r=0) spins fastest; direction alternates per ring.
           const angular = MANDALA_ANGULAR_BASE + (rings - 1 - r) * MANDALA_ANGULAR_STEP;
           ringData.push({ formation, bullets, angular, dir: r % 2 === 0 ? 1 : -1 });
         }
 
-        // Hold so the gaps are readable, then start the descent + rotation.
-        this.time.delayedCall(MANDALA_HOLD_MS, () => {
+        // Let the rings finish drawing in, then hold so the gaps are readable,
+        // then start the descent + rotation.
+        this.time.delayedCall(MANDALA_DRAW_MS + MANDALA_HOLD_MS, () => {
           if (!boss.active || this.state !== 'playing') {
             finish();
             done();
@@ -2007,10 +2040,16 @@ class BulletHellScene extends Phaser.Scene {
 
           // Second half: slow, oversized aimed shots that force the player to move.
           const bigShots = hard ? MANDALA_BIG_SHOTS_HARD : MANDALA_BIG_SHOTS;
+          const jitter = Phaser.Math.DegToRad(MANDALA_BIG_AIM_JITTER_DEG);
           for (let s = 0; s < bigShots; s++) {
             this.time.delayedCall(MANDALA_CONTRACT_MS / 2 + s * MANDALA_BIG_GAP_MS, () => {
               if (!boss.active || this.state !== 'playing') return;
-              const angle = Phaser.Math.Angle.Between(boss.x, boss.y, this.ship.x, this.ship.y);
+              // Aim at where the player is *right now* (snapshot at shot time), then
+              // scatter by a small random angle so a fast volley fans into a partly-
+              // overlapping spread instead of stacking on one line — can't be out-run
+              // straight, and forces the player to keep repositioning.
+              const aim = Phaser.Math.Angle.Between(boss.x, boss.y, this.ship.x, this.ship.y);
+              const angle = aim + Phaser.Math.FloatBetween(-jitter, jitter);
               const b = this.spawnEnemyBullet(boss.x, boss.y + 20, angle, MANDALA_BIG_SPEED, bigTex);
               // Explicit offset so re-circling a 20px body stays centered.
               if (b) (b.body as Phaser.Physics.Arcade.Body).setCircle(MANDALA_BIG_RADIUS, 0, 0);
@@ -2024,7 +2063,14 @@ class BulletHellScene extends Phaser.Scene {
               for (const b of ring.bullets) {
                 if (!b.active) continue;
                 const m = b.getData('motion') as MotionState | undefined;
-                const dir = (m?.baseAngleRad ?? 0) + ring.formation.rotation;
+                // A ring bullet that swept off-screen during the descent gets
+                // recycled to the pool, but its reference lingers in ring.bullets —
+                // and a later big shot may have re-spawned that very sprite. Only
+                // release bullets still driven by *this* formation so we never
+                // hijack a re-used big bullet (whose motion is gone/different) and
+                // fling it back outward instead of on toward the player.
+                if (!m || m.mode !== 'formation' || m.formation !== ring.formation) continue;
+                const dir = (m.baseAngleRad ?? 0) + ring.formation.rotation;
                 b.setVelocity(Math.cos(dir) * MANDALA_RELEASE_SPEED, Math.sin(dir) * MANDALA_RELEASE_SPEED);
                 b.setData('motion', undefined);
               }
