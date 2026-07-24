@@ -173,7 +173,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div className="mx-auto w-full max-w-[1180px] lg:px-4 lg:py-6">
-        <div className="min-h-screen bg-surface lg:flex lg:min-h-[680px] lg:overflow-hidden lg:rounded-2xl lg:border-[1.5px] lg:border-line">
+        <div className="min-h-screen bg-surface lg:flex lg:min-h-[calc(100vh-3rem)] lg:overflow-hidden lg:rounded-2xl lg:border-[1.5px] lg:border-line">
           <aside className="hidden w-[66px] shrink-0 flex-col items-center gap-6 border-r-[1.5px] border-line bg-surface-2 py-6 lg:flex">
             <Suspense fallback={<DesktopRailItems active={NAV_INACTIVE} />}>
               <DesktopRail />
