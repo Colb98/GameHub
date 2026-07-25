@@ -115,6 +115,25 @@ const GAMES: SeedGame[] = [
         '<p><b>Kéo</b>, <b>di chuột</b>, hoặc dùng <b>A / D</b> và phím mũi tên để điều khiển. Chạm hoặc nhấn <b>Space</b> để phóng bóng. Mỗi màu gạch cần 1–4 lần đánh; đội hình hạ xuống sau mỗi 14 giây.</p>',
     },
   },
+  {
+    slug: 'fluxball',
+    category: 'arcade',
+    orientation: 'PORTRAIT',
+    en: {
+      name: 'Fluxball',
+      shortIntro:
+        'Every peg carries a charge. Drop the ball, then flip its polarity mid-flight to pull and push your way through a field that rebuilds itself harder each level.',
+      controlsHtml:
+        '<p><b>Move the mouse</b> or <b>drag</b> to aim, then <b>tap the field</b> to drop the ball. Hit <b>FLIP</b> (or <b>Space</b> / <b>F</b>) in mid-flight to reverse the ball\'s charge — same colours push apart, opposite colours pull together. Each flip costs a pip; hitting a peg refunds one. At zero pips the ball turns white and stops responding to the field. Clear every ringed peg to descend.</p>',
+    },
+    vi: {
+      name: 'Bóng Từ Trường',
+      shortIntro:
+        'Mỗi chốt mang một điện tích. Thả bóng rồi đảo cực giữa đường bay để hút và đẩy nó xuyên qua mê cung tự sinh, mỗi màn một khó hơn.',
+      controlsHtml:
+        '<p><b>Di chuột</b> hoặc <b>kéo</b> để ngắm, rồi <b>chạm vào sân</b> để thả bóng. Nhấn <b>FLIP</b> (hoặc <b>Space</b> / <b>F</b>) khi bóng đang bay để đảo cực — cùng màu thì đẩy nhau, khác màu thì hút nhau. Mỗi lần đảo tốn một chấm năng lượng; chạm vào chốt sẽ hoàn lại một chấm. Hết năng lượng, bóng chuyển trắng và không còn chịu tác động của từ trường. Phá hết các chốt có vòng để xuống màn tiếp theo.</p>',
+    },
+  },
 ];
 
 async function main() {

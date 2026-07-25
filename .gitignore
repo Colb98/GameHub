@@ -17,6 +17,11 @@ storage/
 # generated game bundles (built by `pnpm build` in games/*)
 *.zip
 
+# agent skills (installed via `npx skills add`, restorable on demand;
+# .claude/skills entries are Windows junctions into .agents/skills)
+.agents/
+.claude/skills/
+
 # misc
 .DS_Store
 Thumbs.db
