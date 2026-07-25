@@ -44,6 +44,11 @@ const BUTTON_W = 92;
 const BUTTON_H = 52;
 const BUTTON_GAP = 12;
 const BUTTON_Y = H - 44;
+const CONTROL_TOP = BUTTON_Y - BUTTON_H;
+const CANCEL_X = 86;
+const CANCEL_Y = BUTTON_Y;
+const CANCEL_W = 128;
+const CANCEL_H = BUTTON_H;
 const HAPTIC_PATTERNS: Record<HapticCue, number | number[]> = {
   peg: 8,
   target: [14, 12, 22],
@@ -105,6 +110,10 @@ export class PlayScene extends Phaser.Scene {
   private levelText!: Phaser.GameObjects.Text;
   private ballsText!: Phaser.GameObjects.Text;
   private polarityButtons: PolarityButtonView[] = [];
+  private cancelGfx!: Phaser.GameObjects.Graphics;
+  private cancelLabel!: Phaser.GameObjects.Text;
+  private aimPointerId: number | null = null;
+  private cancelArmed = false;
   private overlay?: Phaser.GameObjects.Container;
 
   private keys?: {
@@ -139,6 +148,8 @@ export class PlayScene extends Phaser.Scene {
     this.overlay = undefined;
     this.pegViews = [];
     this.polarityButtons = [];
+    this.aimPointerId = null;
+    this.cancelArmed = false;
 
     this.runSeed = readSeedParam();
     this.level = readLevelParam();
@@ -149,6 +160,7 @@ export class PlayScene extends Phaser.Scene {
     this.createHud();
     this.createBall();
     this.createPolarityButtons();
+    this.createCancelZone();
     this.createControls();
 
     this.loadLevel(this.level);
@@ -234,19 +246,70 @@ export class PlayScene extends Phaser.Scene {
     this.paintPolarityButtons();
   }
 
+  private createCancelZone() {
+    this.cancelGfx = this.add
+      .graphics()
+      .setPosition(CANCEL_X, CANCEL_Y)
+      .setDepth(100);
+    this.cancelLabel = this.add
+      .text(CANCEL_X, CANCEL_Y, 'DRAG TO\nCANCEL', {
+        fontFamily: FONT,
+        fontSize: '11px',
+        color: '#ff3dcc',
+        align: 'center',
+        lineSpacing: -2,
+      })
+      .setOrigin(0.5)
+      .setLetterSpacing(1)
+      .setDepth(101);
+    this.paintCancelZone();
+  }
+
   private createControls() {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.y < BUTTON_Y - BUTTON_H) this.aimAt(pointer.x, pointer.y);
+      if (this.state !== 'aiming') return;
+
+      if (this.aimPointerId === pointer.id && pointer.isDown) {
+        this.cancelArmed = this.isInsideCancelZone(pointer.x, pointer.y);
+        if (!this.cancelArmed && pointer.y < CONTROL_TOP) {
+          this.aimAt(pointer.x, pointer.y);
+        }
+        return;
+      }
+
+      if (!pointer.isDown && pointer.y < CONTROL_TOP) {
+        this.aimAt(pointer.x, pointer.y);
+      }
     });
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.y >= BUTTON_Y - BUTTON_H) return;
+      if (this.state !== 'aiming') return;
+      if (this.aimPointerId !== null && this.aimPointerId !== pointer.id) return;
+      const insideCancel = this.isInsideCancelZone(pointer.x, pointer.y);
+      if (!insideCancel && pointer.y >= CONTROL_TOP) return;
+
+      this.aimPointerId = pointer.id;
+      this.cancelArmed = insideCancel;
+      if (insideCancel) return;
       this.aimAt(pointer.x, pointer.y);
     });
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.y >= BUTTON_Y - BUTTON_H) return;
-      if (this.state === 'intro' || this.state === 'over') this.startRun();
-      else this.fire();
+      if (this.state === 'intro' || this.state === 'over') {
+        if (pointer.y < CONTROL_TOP) this.startRun();
+        return;
+      }
+      if (this.state !== 'aiming') return;
+
+      const wasAimPointer = this.aimPointerId === pointer.id;
+      if (!wasAimPointer) return;
+      const canceled = this.isInsideCancelZone(pointer.x, pointer.y);
+      this.resetAimGesture();
+      if (canceled) {
+        this.cancelAim();
+        return;
+      }
+      if (wasAimPointer && pointer.y < CONTROL_TOP) this.fire();
     });
+    this.input.on('gameout', () => this.resetAimGesture());
 
     const keyboard = this.input.keyboard;
     if (!keyboard) return;
@@ -274,6 +337,34 @@ export class PlayScene extends Phaser.Scene {
     this.keys.three.on('down', () => this.setPolarity(-1));
     this.keys.enter.on('down', () => {
       if (this.state === 'intro' || this.state === 'over') this.startRun();
+    });
+  }
+
+  private isInsideCancelZone(x: number, y: number) {
+    return (
+      Math.abs(x - CANCEL_X) <= CANCEL_W / 2 &&
+      Math.abs(y - CANCEL_Y) <= CANCEL_H / 2
+    );
+  }
+
+  private resetAimGesture() {
+    this.aimPointerId = null;
+    this.cancelArmed = false;
+  }
+
+  private cancelAim() {
+    this.synth.tone(230, 0.08, 0.018, -70, 'sine');
+    if (this.reducedMotion) return;
+
+    this.tweens.killTweensOf([this.cancelGfx, this.cancelLabel]);
+    this.cancelGfx.setScale(0.94);
+    this.cancelLabel.setScale(0.94);
+    this.tweens.add({
+      targets: [this.cancelGfx, this.cancelLabel],
+      scaleX: 1,
+      scaleY: 1,
+      duration: 150,
+      ease: 'Back.easeOut',
     });
   }
 
@@ -352,6 +443,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private startRun() {
+    this.resetAimGesture();
     this.overlay?.destroy();
     this.overlay = undefined;
     this.score = 0;
@@ -412,6 +504,7 @@ export class PlayScene extends Phaser.Scene {
 
   private fire() {
     if (this.state !== 'aiming') return;
+    this.resetAimGesture();
     const launchCharge = this.world.ball.charge;
     this.pips = this.params.maxPips - (launchCharge === 0 ? 0 : 1);
     this.nextFlipAt = 0;
@@ -501,6 +594,7 @@ export class PlayScene extends Phaser.Scene {
     this.drawBucket();
     this.field.draw(this.world, delta);
     this.paintPolarityButtons();
+    this.paintCancelZone();
   }
 
   private stepSimulation(delta: number) {
@@ -841,6 +935,43 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
+  private paintCancelZone() {
+    const visible = this.state === 'aiming';
+    this.cancelGfx.setVisible(visible);
+    this.cancelLabel.setVisible(visible);
+    if (!visible) return;
+
+    const armed = this.cancelArmed && this.aimPointerId !== null;
+    this.cancelGfx.clear();
+    this.cancelGfx.fillStyle(armed ? HEX.negMagenta : HEX.voidLift, armed ? 0.2 : 0.9);
+    this.cancelGfx.fillRoundedRect(
+      -CANCEL_W / 2,
+      -CANCEL_H / 2,
+      CANCEL_W,
+      CANCEL_H,
+      13,
+    );
+    this.cancelGfx.lineStyle(11, HEX.negGlow, armed ? 0.16 : 0.035);
+    this.cancelGfx.strokeRoundedRect(
+      -CANCEL_W / 2,
+      -CANCEL_H / 2,
+      CANCEL_W,
+      CANCEL_H,
+      13,
+    );
+    this.cancelGfx.lineStyle(armed ? 2.5 : 1.5, HEX.negMagenta, armed ? 1 : 0.5);
+    this.cancelGfx.strokeRoundedRect(
+      -CANCEL_W / 2,
+      -CANCEL_H / 2,
+      CANCEL_W,
+      CANCEL_H,
+      13,
+    );
+    this.cancelLabel
+      .setText(armed ? 'RELEASE TO\nCANCEL' : 'DRAG TO\nCANCEL')
+      .setAlpha(armed ? 1 : 0.78);
+  }
+
   private updateHud() {
     this.scoreText.setText(
       `SCORE ${this.score.toLocaleString('en-US')}  ·  FLUX ${this.pips}`,
@@ -935,6 +1066,7 @@ export class PlayScene extends Phaser.Scene {
       'Matching charges repel. Opposites attract.',
       '',
       'Choose polarity, aim, and release.',
+      'Drag to CANCEL and release to abort.',
       'You can switch again during flight.',
       'Charged choices spend FLUX.',
       'Peg hits restore it.',

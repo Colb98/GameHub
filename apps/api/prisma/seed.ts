@@ -124,14 +124,14 @@ const GAMES: SeedGame[] = [
       shortIntro:
         'Every peg carries a charge. Choose a starting polarity, then switch it mid-flight to pull and push your way through a field that rebuilds itself harder each level.',
       controlsHtml:
-        '<p>Choose <b>NEUTRAL</b>, <b>+</b>, or <b>−</b>, then <b>move the mouse</b> or <b>drag</b> to aim and <b>tap the field</b> to launch. You can switch polarity again in flight; keys <b>1 / 2 / 3</b> select directly, while <b>Space</b> or <b>F</b> cycles. Matching charges repel and opposites attract. Entering + or − spends one FLUX, NEUTRAL is free, and peg hits restore FLUX. Earn +1 shot by clearing 5 target pegs or 20 non-target pegs. Clear every ringed peg to descend.</p>',
+        '<p>Choose <b>NEUTRAL</b>, <b>+</b>, or <b>−</b>, then <b>move the mouse</b> or <b>drag</b> to aim and release to launch. To abort on touch, drag into <b>CANCEL</b> and release there. You can switch polarity again in flight; keys <b>1 / 2 / 3</b> select directly, while <b>Space</b> or <b>F</b> cycles. Matching charges repel and opposites attract. Entering + or − spends one FLUX, NEUTRAL is free, and peg hits restore FLUX. Earn +1 shot by clearing 5 target pegs or 20 non-target pegs. Clear every ringed peg to descend.</p>',
     },
     vi: {
       name: 'Bóng Từ Trường',
       shortIntro:
         'Mỗi chốt mang một điện tích. Chọn cực ban đầu rồi đổi cực giữa đường bay để hút và đẩy bóng xuyên qua mê cung tự sinh, mỗi màn một khó hơn.',
       controlsHtml:
-        '<p>Chọn <b>NEUTRAL</b>, <b>+</b> hoặc <b>−</b>, sau đó <b>di chuột</b> hoặc <b>kéo</b> để ngắm và <b>chạm vào sân</b> để thả bóng. Bạn vẫn có thể đổi cực khi bóng đang bay; phím <b>1 / 2 / 3</b> chọn trực tiếp, còn <b>Space</b> hoặc <b>F</b> chuyển vòng. Cùng dấu thì đẩy nhau, trái dấu thì hút nhau. Chuyển sang + hoặc − tốn một FLUX, NEUTRAL miễn phí, và chạm chốt sẽ hồi lại FLUX. Nhận thêm 1 lượt khi phá 5 chốt mục tiêu hoặc 20 chốt thường. Phá hết các chốt có vòng để xuống màn tiếp theo.</p>',
+        '<p>Chọn <b>NEUTRAL</b>, <b>+</b> hoặc <b>−</b>, sau đó <b>di chuột</b> hoặc <b>kéo</b> để ngắm và thả tay để phóng bóng. Muốn hủy trên màn hình cảm ứng, kéo vào vùng <b>CANCEL</b> rồi thả tay tại đó. Bạn vẫn có thể đổi cực khi bóng đang bay; phím <b>1 / 2 / 3</b> chọn trực tiếp, còn <b>Space</b> hoặc <b>F</b> chuyển vòng. Cùng dấu thì đẩy nhau, trái dấu thì hút nhau. Chuyển sang + hoặc − tốn một FLUX, NEUTRAL miễn phí, và chạm chốt sẽ hồi lại FLUX. Nhận thêm 1 lượt khi phá 5 chốt mục tiêu hoặc 20 chốt thường. Phá hết các chốt có vòng để xuống màn tiếp theo.</p>',
     },
   },
 ];
