@@ -22,8 +22,9 @@ mobile app later.
 apps/api        NestJS API (auth, games, scores, studio, admin)
 apps/web        Next.js portal (player pages + /studio + /admin)
 packages/game-sdk  postMessage bridge between portal shell and games
-games/flappy-bird  sample game (portrait)
-games/bullet-hell  sample game (both orientations)
+games/flappy-bird   sample game (portrait)
+games/bullet-hell   sample game (both orientations)
+games/neon-descent  neon brick breaker (portrait)
 infra/          compose files, Caddyfile, VPS setup + backup scripts
 scripts/        dev-db.mjs (embedded Postgres for Docker-less dev)
 ```

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="theme-color" content="#11152b" />
+    <title>Neon Descent</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Trebuchet MS", Arial, sans-serif;
+        background: #11152b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body,
+      #game {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background:
+          linear-gradient(166deg, transparent 0 42%, #17213b 42% 48%, transparent 48% 100%),
+          #11152b;
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+
+      canvas {
+        display: block;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game" aria-label="Neon Descent brick breaker game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

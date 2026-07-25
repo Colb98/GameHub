@@ -1,5 +1,5 @@
 /**
- * Seeds dev/demo data: an admin, a developer, a player, the two sample games
+ * Seeds dev/demo data: an admin, a developer, a player, the sample games
  * (bundles copied from games/x/dist into the storage dir), and some
  * scores/comments/ratings so lists and leaderboards aren't empty.
  *
@@ -94,6 +94,25 @@ const GAMES: SeedGame[] = [
         'Né những làn mưa đạn và bắn hạ tàu địch. Sống sót càng lâu càng tốt!',
       controlsHtml:
         '<p><b>Kéo</b> (cảm ứng) hoặc <b>di chuột</b> để điều khiển phi thuyền — tự động bắn. Diệt địch để ghi điểm; trúng đạn mất một mạng.</p>',
+    },
+  },
+  {
+    slug: 'neon-descent',
+    category: 'arcade',
+    orientation: 'PORTRAIT',
+    en: {
+      name: 'Neon Descent',
+      shortIntro:
+        'Shatter a falling spectrum of neon bricks before it breaches the line. Catch strange signals and multiply the chaos.',
+      controlsHtml:
+        '<p><b>Drag</b>, <b>move the mouse</b>, or use <b>A / D</b> and the arrow keys to steer. Tap or press <b>Space</b> to launch. Brick colors take 1–4 hits; the formation descends every 14 seconds.</p>',
+    },
+    vi: {
+      name: 'Neon Giáng Xuống',
+      shortIntro:
+        'Phá vỡ quang phổ gạch neon đang hạ xuống trước khi nó vượt qua phòng tuyến. Hứng tín hiệu lạ và nhân lên sự hỗn loạn.',
+      controlsHtml:
+        '<p><b>Kéo</b>, <b>di chuột</b>, hoặc dùng <b>A / D</b> và phím mũi tên để điều khiển. Chạm hoặc nhấn <b>Space</b> để phóng bóng. Mỗi màu gạch cần 1–4 lần đánh; đội hình hạ xuống sau mỗi 14 giây.</p>',
     },
   },
 ];
