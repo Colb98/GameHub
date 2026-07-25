@@ -15,6 +15,7 @@ const PADDLE_Y = 836;
 const PADDLE_W = 128;
 const DANGER_Y = 760;
 const DESCENT_INTERVAL_MS = 14_000;
+const MAX_DESCENT_REDUCTION_MS = 500;
 const FREEZE_BONUS_MS = 8_000;
 const BALL_SPEED = 430;
 const MAX_BALLS = 36;
@@ -22,24 +23,24 @@ const START_LIVES = 3;
 const DROP_CHANCE = 0.23;
 const SYNTH_VOLUME_BOOST = 1.2;
 const PALETTE = {
-  ink: '#11152b',
-  inkDeep: '#0b1022',
-  surface: '#1a2039',
-  surfaceLight: '#252b49',
-  cream: '#eee4cf',
-  text: '#c7c3c8',
-  muted: '#7e8298',
-  cyan: '#78aeb2',
-  cyanDark: '#436f79',
-  magenta: '#ad718f',
-  magentaDark: '#68445f',
-  amber: '#d0a166',
-  amberDark: '#7a5d43',
-  violet: '#8880a6',
-  violetDark: '#504a71',
-  rose: '#b76f7c',
-  mint: '#80ad98',
-  ice: '#91adbb',
+  ink: '#0c1233',
+  inkDeep: '#070b24',
+  surface: '#182657',
+  surfaceLight: '#243872',
+  cream: '#fff8e7',
+  text: '#e8e9ff',
+  muted: '#aeb6da',
+  cyan: '#55e6ff',
+  cyanDark: '#1688ad',
+  magenta: '#ff6fcf',
+  magentaDark: '#ad2d80',
+  amber: '#ffd166',
+  amberDark: '#b86c24',
+  violet: '#a98bff',
+  violetDark: '#6247bd',
+  rose: '#ff6685',
+  mint: '#63f4bd',
+  ice: '#bdefff',
 } as const;
 
 type GameState = 'intro' | 'ready' | 'playing' | 'dead';
@@ -86,7 +87,7 @@ const POWERS: PowerSpec[] = [
   { key: 'ball1', glyph: '+1', label: 'ADD ORB', color: PALETTE.cyan, weight: 27 },
   { key: 'paddleFast', glyph: '»', label: 'PADDLE RUSH', color: PALETTE.mint, weight: 18 },
   { key: 'freeze', glyph: '❄', label: 'TIME FROZEN', color: PALETTE.ice, weight: 15 },
-  { key: 'weak', glyph: '¾', label: 'LIGHTSPEED', color: '#7798b0', weight: 12 },
+  { key: 'weak', glyph: '¾', label: 'LIGHTSPEED', color: '#75cfff', weight: 12 },
   { key: 'paddleSlow', glyph: '‹', label: 'PADDLE DRAG', color: PALETTE.rose, weight: 10 },
   { key: 'strong', glyph: '2×', label: 'HEAVY ORB', color: PALETTE.amber, weight: 7 },
   { key: 'triple', glyph: '×3', label: 'PRISM SPLIT', color: PALETTE.magenta, weight: 5 },
@@ -175,8 +176,10 @@ class NeonDescentScene extends Phaser.Scene {
   private score = 0;
   private lives = START_LIVES;
   private wave = 1;
+  private scoreMultiplier = 1;
   private startedAt = 0;
   private nextDescentAt = 0;
+  private descentIntervalMs = DESCENT_INTERVAL_MS;
   private descentBusy = false;
   private lifeTransition = false;
   private lastTrailAt = 0;
@@ -187,6 +190,7 @@ class NeonDescentScene extends Phaser.Scene {
   private ballMode: BallMode = 'normal';
   private ballEffectUntil = 0;
   private scoreText!: Phaser.GameObjects.Text;
+  private scoreMultiplierText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private ballCountText!: Phaser.GameObjects.Text;
@@ -212,8 +216,10 @@ class NeonDescentScene extends Phaser.Scene {
     this.score = 0;
     this.lives = START_LIVES;
     this.wave = 1;
+    this.scoreMultiplier = 1;
     this.startedAt = 0;
     this.nextDescentAt = 0;
+    this.descentIntervalMs = DESCENT_INTERVAL_MS;
     this.descentBusy = false;
     this.lifeTransition = false;
     this.lastTrailAt = 0;
@@ -246,7 +252,7 @@ class NeonDescentScene extends Phaser.Scene {
     const texture = this.textures.createCanvas('ball', 44, 44);
     if (!texture) return;
     const ctx = texture.getContext();
-    ctx.fillStyle = 'rgba(120,174,178,.12)';
+    ctx.fillStyle = 'rgba(85,230,255,.22)';
     ctx.beginPath();
     ctx.arc(22, 22, 18, 0, Math.PI * 2);
     ctx.fill();
@@ -269,7 +275,7 @@ class NeonDescentScene extends Phaser.Scene {
     const texture = this.textures.createCanvas('paddle', 172, 54);
     if (!texture) return;
     const ctx = texture.getContext();
-    ctx.fillStyle = 'rgba(120,174,178,.13)';
+    ctx.fillStyle = 'rgba(85,230,255,.2)';
     roundRect(ctx, 7, 8, 158, 38, 19);
     ctx.fill();
     ctx.fillStyle = PALETTE.surfaceLight;
@@ -295,7 +301,7 @@ class NeonDescentScene extends Phaser.Scene {
     if (!texture) return;
     const ctx = texture.getContext();
     const color = BRICK_COLORS[hp];
-    ctx.fillStyle = `${color}24`;
+    ctx.fillStyle = `${color}38`;
     roundRect(ctx, 3, 4, 74, 34, 11);
     ctx.fill();
     ctx.fillStyle = BRICK_DARK[hp];
@@ -318,7 +324,7 @@ class NeonDescentScene extends Phaser.Scene {
     const texture = this.textures.createCanvas(`power-${spec.key}`, 52, 52);
     if (!texture) return;
     const ctx = texture.getContext();
-    ctx.fillStyle = `${spec.color}22`;
+    ctx.fillStyle = `${spec.color}38`;
     ctx.beginPath();
     ctx.arc(26, 26, 24, 0, Math.PI * 2);
     ctx.fill();
@@ -346,7 +352,7 @@ class NeonDescentScene extends Phaser.Scene {
       ctx.fillRect(0, 0, W, H);
 
       // Broad, flat color bands replace the old point-source neon glows.
-      ctx.fillStyle = '#17213b';
+      ctx.fillStyle = '#142b55';
       ctx.beginPath();
       ctx.moveTo(0, 215);
       ctx.bezierCurveTo(125, 174, 226, 254, 358, 215);
@@ -356,7 +362,7 @@ class NeonDescentScene extends Phaser.Scene {
       ctx.bezierCurveTo(145, 337, 78, 282, 0, 325);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#38243c';
+      ctx.fillStyle = '#4a205c';
       ctx.beginPath();
       ctx.moveTo(0, 600);
       ctx.bezierCurveTo(103, 534, 202, 662, 326, 593);
@@ -366,7 +372,7 @@ class NeonDescentScene extends Phaser.Scene {
       ctx.bezierCurveTo(187, 797, 92, 688, 0, 755);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#24354a';
+      ctx.fillStyle = '#1b4367';
       ctx.beginPath();
       ctx.moveTo(0, 744);
       ctx.bezierCurveTo(124, 679, 218, 813, 337, 752);
@@ -376,7 +382,7 @@ class NeonDescentScene extends Phaser.Scene {
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = 'rgba(120,174,178,.07)';
+      ctx.fillStyle = 'rgba(85,230,255,.1)';
       ctx.beginPath();
       ctx.moveTo(44, 150);
       ctx.lineTo(132, 150);
@@ -384,7 +390,7 @@ class NeonDescentScene extends Phaser.Scene {
       ctx.lineTo(198, H);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = 'rgba(173,113,143,.07)';
+      ctx.fillStyle = 'rgba(255,111,207,.1)';
       ctx.beginPath();
       ctx.moveTo(505, 150);
       ctx.lineTo(588, 150);
@@ -400,7 +406,7 @@ class NeonDescentScene extends Phaser.Scene {
       };
       for (let i = 0; i < 105; i += 1) {
         const alpha = 0.07 + random() * 0.18;
-        ctx.fillStyle = `rgba(199,195,200,${alpha})`;
+        ctx.fillStyle = `rgba(232,233,255,${alpha})`;
         const size = random() > 0.94 ? 2 : 1;
         ctx.fillRect(random() * W, 160 + random() * (H - 180), size, size);
       }
@@ -408,11 +414,11 @@ class NeonDescentScene extends Phaser.Scene {
     }
     this.add.image(W / 2, H / 2, 'backdrop');
     const upperBand = this.add
-      .rectangle(W / 2 - 40, 515, W + 160, 24, 0x78aeb2, 0.055)
+      .rectangle(W / 2 - 40, 515, W + 160, 24, 0x55e6ff, 0.09)
       .setAngle(-7)
       .setDepth(1);
     const lowerBand = this.add
-      .rectangle(W / 2 + 50, 690, W + 170, 34, 0xad718f, 0.045)
+      .rectangle(W / 2 + 50, 690, W + 170, 34, 0xff6fcf, 0.075)
       .setAngle(6)
       .setDepth(1);
     this.tweens.add({
@@ -441,17 +447,17 @@ class NeonDescentScene extends Phaser.Scene {
       .setAngle(-90)
       .setAlpha(0.025);
     const grid = this.add.graphics();
-    grid.lineStyle(1, 0x8880a6, 0.055);
+    grid.lineStyle(1, 0xa98bff, 0.085);
     for (let x = 40; x < W; x += 40) grid.lineBetween(x, 150, x, H);
     for (let y = 160; y < H; y += 40) grid.lineBetween(WORLD_LEFT, y, WORLD_RIGHT, y);
     const rails = this.add.graphics();
-    rails.lineStyle(1, 0x78aeb2, 0.3);
+    rails.lineStyle(1, 0x55e6ff, 0.42);
     rails.lineBetween(WORLD_LEFT, 148, WORLD_LEFT, H);
-    rails.lineStyle(1, 0xad718f, 0.3);
+    rails.lineStyle(1, 0xff6fcf, 0.42);
     rails.lineBetween(WORLD_RIGHT, 148, WORLD_RIGHT, H);
-    rails.lineStyle(7, 0x78aeb2, 0.045);
+    rails.lineStyle(7, 0x55e6ff, 0.075);
     rails.lineBetween(WORLD_LEFT + 3, 148, WORLD_LEFT + 3, H);
-    rails.lineStyle(7, 0xad718f, 0.045);
+    rails.lineStyle(7, 0xff6fcf, 0.075);
     rails.lineBetween(WORLD_RIGHT - 3, 148, WORLD_RIGHT - 3, H);
   }
 
@@ -487,9 +493,13 @@ class NeonDescentScene extends Phaser.Scene {
         color: PALETTE.magenta,
         letterSpacing: 3,
       });
-    this.add.rectangle(36, 65, 176, 3, 0x78aeb2, 0.7).setOrigin(0, 0.5);
-    this.add.rectangle(212, 65, 58, 3, 0xad718f, 0.7).setOrigin(0, 0.5);
+    this.add.rectangle(36, 65, 176, 3, 0x55e6ff, 0.9).setOrigin(0, 0.5);
+    this.add.rectangle(212, 65, 58, 3, 0xff6fcf, 0.9).setOrigin(0, 0.5);
     this.add.text(36, 75, 'SCORE', this.labelStyle());
+    this.scoreMultiplierText = this.add.text(144, 75, '×1', {
+      ...this.labelStyle(),
+      color: PALETTE.amber,
+    });
     this.scoreText = this.add.text(36, 91, '000000', this.valueStyle());
     this.add.text(241, 75, 'WAVE', this.labelStyle());
     this.waveText = this.add.text(241, 91, '01', this.valueStyle());
@@ -532,7 +542,7 @@ class NeonDescentScene extends Phaser.Scene {
 
   private drawDangerLine(alpha: number) {
     this.dangerLine.clear();
-    this.dangerLine.lineStyle(1, 0xb76f7c, alpha);
+    this.dangerLine.lineStyle(1, 0xff6685, alpha);
     for (let x = WORLD_LEFT + 8; x < WORLD_RIGHT; x += 18) {
       this.dangerLine.lineBetween(x, DANGER_Y, Math.min(x + 8, WORLD_RIGHT), DANGER_Y);
     }
@@ -553,7 +563,7 @@ class NeonDescentScene extends Phaser.Scene {
     this.bricks = this.physics.add.staticGroup();
     this.powers = this.physics.add.group({ allowGravity: false });
     this.paddleAura = this.add
-      .ellipse(W / 2, PADDLE_Y, 178, 46, 0x78aeb2, 0.08);
+      .ellipse(W / 2, PADDLE_Y, 178, 46, 0x55e6ff, 0.14);
     this.paddle = this.physics.add.image(W / 2, PADDLE_Y, 'paddle').setDepth(10);
     this.paddle.setImmovable(true).setPushable(false);
     (this.paddle.body as Phaser.Physics.Arcade.Body)
@@ -622,8 +632,8 @@ class NeonDescentScene extends Phaser.Scene {
   }
 
   private createIntro() {
-    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0b1022, 0.89);
-    const topRule = this.add.rectangle(W / 2, 224, 92, 3, 0xad718f, 0.9);
+    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x070b24, 0.76);
+    const topRule = this.add.rectangle(W / 2, 224, 92, 3, 0xff6fcf, 1);
     const eyebrow = this.add
       .text(W / 2, 190, 'A CHROMATIC SURVIVAL BREAKER', {
         fontFamily: '"Courier New", monospace',
@@ -645,7 +655,7 @@ class NeonDescentScene extends Phaser.Scene {
       .text(
         W / 2,
         346,
-        'Every color carries another layer.\nEvery fourteen seconds, the ceiling gets closer.',
+        'Every color carries another layer.\nClear the spectrum before the descent accelerates.',
         {
           fontFamily: '"Trebuchet MS", sans-serif',
           fontSize: '14px',
@@ -696,7 +706,7 @@ class NeonDescentScene extends Phaser.Scene {
         color: PALETTE.muted,
       })
       .setOrigin(0.5);
-    const startBand = this.add.rectangle(W / 2, 692, 286, 48, 0x78aeb2, 0.1);
+    const startBand = this.add.rectangle(W / 2, 692, 286, 48, 0x55e6ff, 0.16);
     const start = this.add
       .text(W / 2, 690, 'TAP / SPACE TO LAUNCH', {
         fontFamily: '"Arial Black", "Trebuchet MS", sans-serif',
@@ -757,7 +767,7 @@ class NeonDescentScene extends Phaser.Scene {
       this.overlay?.destroy();
       this.overlay = undefined;
       this.startedAt = this.time.now;
-      this.nextDescentAt = this.time.now + DESCENT_INTERVAL_MS;
+      this.nextDescentAt = this.time.now + this.descentIntervalMs;
     }
     this.readyLabel?.destroy();
     this.readyLabel = undefined;
@@ -768,7 +778,7 @@ class NeonDescentScene extends Phaser.Scene {
       const offset = clamp((attached.x - this.paddle.x) / (PADDLE_W / 2), -0.7, 0.7);
       this.setBallDirection(attached, offset * 0.72, -1);
     }
-    this.flash(0x78aeb2, 0.1, 250);
+    this.flash(0x55e6ff, 0.12, 250);
   }
 
   private spawnPattern(rows: number) {
@@ -803,7 +813,7 @@ class NeonDescentScene extends Phaser.Scene {
     (ball.body as Phaser.Physics.Arcade.Body).setCircle(6, 16, 16);
     ball.setData({
       attached: !moving,
-      trailHue: Math.random() > 0.5 ? 0x78aeb2 : 0xad718f,
+      trailHue: Math.random() > 0.5 ? 0x55e6ff : 0xff6fcf,
       paddleHitLock: 0,
     });
     if (moving) {
@@ -869,7 +879,7 @@ class NeonDescentScene extends Phaser.Scene {
     this.paddle.setY(PADDLE_Y);
     paddleBody.setVelocityY(0);
     this.synth.tone(210, 0.045, 0.022, 90);
-    this.impactRing(ball.x, PADDLE_Y - 8, 0x78aeb2, 24);
+    this.impactRing(ball.x, PADDLE_Y - 8, 0x55e6ff, 24);
     this.tweens.killTweensOf(this.paddleAura);
     this.paddleAura.setScale(1).setAlpha(0.13);
     this.tweens.add({
@@ -904,7 +914,7 @@ class NeonDescentScene extends Phaser.Scene {
     const hp = Number(brick.getData('hp')) - this.currentBallDamage();
     brick.setData('hp', hp);
     this.synth.tone(270 + Math.max(1, Math.ceil(hp)) * 95, 0.055, 0.025, 80);
-    const ringColor = hp <= 0 ? 0xeee4cf : hex(BRICK_COLORS[Math.ceil(hp)]);
+    const ringColor = hp <= 0 ? 0xfff8e7 : hex(BRICK_COLORS[Math.ceil(hp)]);
     this.impactRing(ball.x, ball.y, ringColor, 19);
     if (hp <= 0) {
       this.cameras.main.shake(55, 0.0011, true);
@@ -935,7 +945,8 @@ class NeonDescentScene extends Phaser.Scene {
     const { x, y } = brick;
     const maxHp = Number(brick.getData('maxHp'));
     const color = hex(BRICK_COLORS[maxHp]);
-    const points = maxHp * 110 + this.wave * 15;
+    const basePoints = maxHp * 110 + this.wave * 15;
+    const points = basePoints * this.scoreMultiplier;
     this.score += points;
     this.scoreText.setText(String(this.score).padStart(6, '0'));
     brick.destroy();
@@ -945,13 +956,24 @@ class NeonDescentScene extends Phaser.Scene {
     this.maybeDropPower(x, y);
     if (this.bricks.countActive(true) === 0) {
       this.wave += 1;
+      this.scoreMultiplier *= 2;
+      this.descentIntervalMs -= Math.min(
+        MAX_DESCENT_REDUCTION_MS,
+        this.descentIntervalMs * 0.1,
+      );
       this.waveText.setText(String(this.wave).padStart(2, '0'));
-      this.nextDescentAt = this.time.now + DESCENT_INTERVAL_MS;
-      this.statusText.setText('SPECTRUM CLEARED // NEW FORMATION');
+      this.scoreMultiplierText.setText(`×${this.scoreMultiplier}`);
+      this.nextDescentAt = this.time.now + this.descentIntervalMs;
+      this.statusText.setText(
+        `SPECTRUM CLEARED // SCORE ×${this.scoreMultiplier} // FALL ${(this.descentIntervalMs / 1000).toFixed(1)}s`,
+      );
       this.time.delayedCall(650, () => {
         if (this.state === 'dead') return;
         this.spawnPattern(Math.min(7, 5 + Math.floor(this.wave / 3)));
-        this.banner(`WAVE ${String(this.wave).padStart(2, '0')}`, PALETTE.cyan);
+        this.banner(
+          `WAVE ${String(this.wave).padStart(2, '0')} // SCORE ×${this.scoreMultiplier}`,
+          PALETTE.cyan,
+        );
       });
     }
   }
@@ -1079,7 +1101,7 @@ class NeonDescentScene extends Phaser.Scene {
 
   private freezeFx() {
     const frost = this.add.graphics().setDepth(80);
-    frost.lineStyle(2, 0x91adbb, 0.46);
+    frost.lineStyle(2, 0xbdefff, 0.58);
     for (let i = 0; i < 24; i += 1) {
       const x = Math.random() * W;
       const y = Math.random() * H;
@@ -1098,9 +1120,9 @@ class NeonDescentScene extends Phaser.Scene {
   private descend() {
     if (this.descentBusy || this.state !== 'playing') return;
     this.descentBusy = true;
-    this.nextDescentAt = this.time.now + DESCENT_INTERVAL_MS;
+    this.nextDescentAt = this.time.now + this.descentIntervalMs;
     this.banner('THE CEILING FALLS', PALETTE.rose);
-    this.flash(0xad718f, 0.07, 480);
+    this.flash(0xff6fcf, 0.09, 480);
     this.cameras.main.shake(260, 0.0024);
     const active = (this.bricks.getChildren() as Brick[]).filter((brick) => brick.active);
     if (!active.length) {
@@ -1144,7 +1166,7 @@ class NeonDescentScene extends Phaser.Scene {
       (brick) => brick.active && brick.y + BRICK_H / 2 >= DANGER_Y,
     );
     for (const brick of breached) {
-      this.burst(brick.x, brick.y, 0xb76f7c, 5);
+      this.burst(brick.x, brick.y, 0xff6685, 5);
       brick.destroy();
     }
     this.loseLife('BREACH');
@@ -1157,7 +1179,7 @@ class NeonDescentScene extends Phaser.Scene {
     this.updateLives();
     this.synth.tone(190, 0.28, 0.05, -110);
     this.banner(reason, PALETTE.rose);
-    this.flash(0xb76f7c, 0.18, 520);
+    this.flash(0xff6685, 0.2, 520);
     this.cameras.main.shake(420, 0.009);
     if (navigator.vibrate) navigator.vibrate([80, 40, 110]);
     if (this.lives <= 0) {
@@ -1174,7 +1196,7 @@ class NeonDescentScene extends Phaser.Scene {
     for (const ball of this.activeBalls()) ball.destroy();
     this.updateBallCount();
     this.state = 'ready';
-    this.nextDescentAt = this.time.now + DESCENT_INTERVAL_MS;
+    this.nextDescentAt = this.time.now + this.descentIntervalMs;
     this.time.delayedCall(620, () => {
       if (this.state === 'dead') return;
       this.spawnBall(this.paddle.x, PADDLE_Y - 35, 0, false);
@@ -1293,14 +1315,16 @@ class NeonDescentScene extends Phaser.Scene {
 
   private updateDescent(time: number) {
     const remaining =
-      this.state === 'playing' ? Math.max(0, this.nextDescentAt - time) : DESCENT_INTERVAL_MS;
-    const ratio = clamp(remaining / DESCENT_INTERVAL_MS, 0, 1);
+      this.state === 'playing'
+        ? Math.max(0, this.nextDescentAt - time)
+        : this.descentIntervalMs;
+    const ratio = clamp(remaining / this.descentIntervalMs, 0, 1);
     this.descentText.setText(`${(remaining / 1000).toFixed(1)}s`);
     this.descentText.setColor(ratio < 0.23 ? PALETTE.rose : PALETTE.cyan);
     this.descentBar.clear();
-    this.descentBar.fillStyle(0x2c2346, 0.75);
+    this.descentBar.fillStyle(0x30245f, 0.8);
     this.descentBar.fillRoundedRect(36, 150, W - 72, 3, 2);
-    const color = ratio < 0.23 ? 0xb76f7c : 0x78aeb2;
+    const color = ratio < 0.23 ? 0xff6685 : 0x55e6ff;
     this.descentBar.fillStyle(color, 0.88);
     this.descentBar.fillRoundedRect(36, 150, (W - 72) * ratio, 3, 2);
     this.descentBar.fillStyle(color, 0.13);
@@ -1413,8 +1437,8 @@ class NeonDescentScene extends Phaser.Scene {
     this.physics.pause();
     this.time.removeAllEvents();
     this.tweens.killAll();
-    this.add.rectangle(W / 2, H / 2, W, H, 0x0b1022, 0.86).setDepth(120);
-    this.add.rectangle(W / 2, 337, 120, 3, 0xb76f7c).setDepth(121);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x070b24, 0.84).setDepth(120);
+    this.add.rectangle(W / 2, 337, 120, 3, 0xff6685).setDepth(121);
     this.add
       .text(W / 2, 390, 'LIGHTS OUT', {
         fontFamily: '"Arial Black", "Trebuchet MS", sans-serif',
