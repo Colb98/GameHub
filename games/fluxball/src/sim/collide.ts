@@ -4,8 +4,15 @@ import type { Ball, Peg } from './types';
 /** Reflects `ball` off the unit normal (nx, ny) and applies restitution. */
 export function reflect(ball: Ball, nx: number, ny: number): void {
   const dot = ball.vx * nx + ball.vy * ny;
-  ball.vx = (ball.vx - 2 * dot * nx) * RESTITUTION;
-  ball.vy = (ball.vy - 2 * dot * ny) * RESTITUTION;
+  // Ignore contacts while already separating. This prevents permanent pegs from
+  // flipping the ball back into themselves on consecutive fixed sub-steps.
+  if (dot >= 0) return;
+
+  // Restitution belongs on the normal component only. Scaling the whole velocity
+  // also damps the tangential component, which made every impact feel sticky.
+  const impulse = (1 + RESTITUTION) * dot;
+  ball.vx -= impulse * nx;
+  ball.vy -= impulse * ny;
 }
 
 /**

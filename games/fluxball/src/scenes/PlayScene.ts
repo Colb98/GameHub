@@ -31,15 +31,15 @@ import {
 import { PegHash } from '../sim/hash';
 import { pegCharge } from '../sim/forces';
 import type { Charge, Peg, World } from '../sim/types';
-import { createWorld, launch, step } from '../sim/world';
+import { clonePegs, createWorld, launch, step } from '../sim/world';
 
 type State = 'intro' | 'aiming' | 'flight' | 'clearing' | 'over';
 
-const FONT = '"Courier New", "Consolas", monospace';
+const FONT = '"Arial Narrow", "Segoe UI", sans-serif';
+const MONO = '"Courier New", "Consolas", monospace';
 const BUTTON_W = 216;
 const BUTTON_H = 52;
 const BUTTON_Y = H - 44;
-const PIP_Y = 136;
 
 interface PegView {
   glow: Phaser.GameObjects.Image;
@@ -75,13 +75,15 @@ export class PlayScene extends Phaser.Scene {
   private simDt = SIM_DT;
   private slowFrames = 0;
   private prevBall = { x: 0, y: 0 };
+  private aimPath: { x: number; y: number }[] = [];
 
+  private ballVisual!: Phaser.GameObjects.Container;
   private ballGlow!: Phaser.GameObjects.Image;
   private ballCore!: Phaser.GameObjects.Image;
   private ballGlyph!: Phaser.GameObjects.Text;
   private aimGfx!: Phaser.GameObjects.Graphics;
   private bucketGfx!: Phaser.GameObjects.Graphics;
-  private pipGfx!: Phaser.GameObjects.Graphics;
+  private hudGfx!: Phaser.GameObjects.Graphics;
   private scoreText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
   private ballsText!: Phaser.GameObjects.Text;
@@ -137,40 +139,49 @@ export class PlayScene extends Phaser.Scene {
   // --- setup ---------------------------------------------------------------
 
   private createHud() {
+    this.hudGfx = this.add.graphics().setDepth(99).setBlendMode(Phaser.BlendModes.ADD);
+    this.hudGfx.lineStyle(7, HEX.posGlow, 0.08);
+    this.hudGfx.lineBetween(FIELD_LEFT, 66, FIELD_RIGHT, 66);
+    this.hudGfx.lineStyle(1, HEX.posCyan, 0.5);
+    this.hudGfx.lineBetween(FIELD_LEFT, 66, FIELD_RIGHT, 66);
+
     this.scoreText = this.add
-      .text(FIELD_LEFT + 4, 24, '0', { fontFamily: FONT, fontSize: '26px', color: '#f2f5ff' })
-      .setAlpha(0.85)
+      .text(FIELD_LEFT + 4, 30, 'SCORE  0', {
+        fontFamily: MONO,
+        fontSize: '17px',
+        color: '#f7fbff',
+      })
+      .setAlpha(0.92)
       .setDepth(100);
     this.levelText = this.add
-      .text(W / 2, 26, 'LEVEL 1', { fontFamily: FONT, fontSize: '18px', color: '#f2f5ff' })
+      .text(W / 2, 31, 'DEPTH 01', { fontFamily: FONT, fontSize: '17px', color: '#2cf6ff' })
       .setOrigin(0.5)
-      .setAlpha(0.6)
+      .setAlpha(0.88)
       .setDepth(100);
     this.ballsText = this.add
-      .text(FIELD_RIGHT - 4, 26, '', { fontFamily: FONT, fontSize: '18px', color: '#f2f5ff' })
+      .text(FIELD_RIGHT - 4, 31, '', { fontFamily: MONO, fontSize: '15px', color: '#f7fbff' })
       .setOrigin(1, 0.5)
-      .setAlpha(0.6)
+      .setAlpha(0.78)
       .setDepth(100);
 
     this.aimGfx = this.add.graphics().setDepth(45);
     this.bucketGfx = this.add.graphics().setDepth(45);
-    this.pipGfx = this.add.graphics().setDepth(100);
   }
 
   private createBall() {
     this.ballGlow = this.add
-      .image(LAUNCH_X, LAUNCH_Y, TEX.glow)
-      .setDepth(48)
+      .image(0, 0, TEX.glow)
       .setBlendMode(Phaser.BlendModes.ADD)
-      // Glow radius 1.4x the ball: present, but never blooming into the field.
-      .setDisplaySize(56, 56)
-      .setAlpha(0.5);
-    this.ballCore = this.add.image(LAUNCH_X, LAUNCH_Y, TEX.ball).setDepth(50);
+      .setDisplaySize(72, 72)
+      .setAlpha(0.62);
+    this.ballCore = this.add.image(0, 0, TEX.ball);
     this.ballGlyph = this.add
-      .text(LAUNCH_X, LAUNCH_Y, '', { fontFamily: FONT, fontSize: '13px', color: '#05060f' })
+      .text(0, 0, '', { fontFamily: MONO, fontSize: '13px', color: '#02030a' })
       .setOrigin(0.5)
-      .setDepth(51)
-      .setAlpha(0.4);
+      .setAlpha(0.55);
+    this.ballVisual = this.add
+      .container(LAUNCH_X, LAUNCH_Y, [this.ballGlow, this.ballCore, this.ballGlyph])
+      .setDepth(50);
     this.paintBall(0);
   }
 
@@ -237,7 +248,7 @@ export class PlayScene extends Phaser.Scene {
     this.ballsLeft = this.params.balls;
     this.pips = this.params.maxPips;
     this.lastCharge = -1;
-    this.levelText.setText(`LEVEL ${level}`);
+    this.levelText.setText(`DEPTH ${String(level).padStart(2, '0')}`);
     this.updateHud();
   }
 
@@ -261,34 +272,38 @@ export class PlayScene extends Phaser.Scene {
       this.pegViews.push(this.createPegView(peg));
     }
     this.field.clearTrail();
+    this.rebuildAimPath();
   }
 
   private createPegView(peg: Peg): PegView {
     const isAnchor = peg.kind === 'anchor';
     const isNeutral = peg.kind === 'neutral';
-    const glowSize = (isAnchor ? 3.6 : 3.4) * peg.radius * 2;
+    const glowSize = (isAnchor ? 4.5 : 4.1) * peg.radius * 2;
 
     const glow = this.add
       .image(peg.x, peg.y, TEX.glow)
       .setDepth(10)
       .setBlendMode(Phaser.BlendModes.ADD)
       .setDisplaySize(glowSize, glowSize)
-      // Neutral pegs get no glow at all: the absence of light is the signal.
-      .setAlpha(isNeutral ? 0 : 0.55);
+      .setAlpha(isNeutral ? 0.13 : isAnchor ? 0.62 : 0.72);
 
     const core = this.add
       .image(peg.x, peg.y, isAnchor ? TEX.anchor : TEX.core)
       .setDepth(30)
-      .setDisplaySize(peg.radius * 2 + 4, peg.radius * 2 + 4);
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDisplaySize(peg.radius * 2 + 7, peg.radius * 2 + 7);
 
     if (!isAnchor) core.setTint(isNeutral ? HEX.pegDim : chargeHex(peg.sign));
-    if (!isNeutral && !isAnchor) glow.setTint(chargeGlowHex(peg.sign));
+    glow.setTint(
+      isAnchor ? HEX.violet : isNeutral ? HEX.pegDim : chargeGlowHex(peg.sign),
+    );
 
     let ring: Phaser.GameObjects.Image | undefined;
     if (peg.target) {
       ring = this.add
         .image(peg.x, peg.y, TEX.ring)
         .setDepth(32)
+        .setBlendMode(Phaser.BlendModes.ADD)
         .setDisplaySize(peg.radius * 4.4, peg.radius * 4.4);
       glow.setDisplaySize(glowSize * 1.15, glowSize * 1.15);
     }
@@ -314,7 +329,42 @@ export class PlayScene extends Phaser.Scene {
   private aimAt(x: number, y: number) {
     const dx = x - LAUNCH_X;
     const dy = Math.max(24, y - LAUNCH_Y);
-    this.aim = Phaser.Math.Clamp(Math.atan2(dx, dy), -AIM_LIMIT, AIM_LIMIT);
+    const next = Phaser.Math.Clamp(Math.atan2(dx, dy), -AIM_LIMIT, AIM_LIMIT);
+    if (Math.abs(next - this.aim) < 0.002) return;
+    this.aim = next;
+    this.rebuildAimPath();
+  }
+
+  /**
+   * Uses the same world, fixed step, gravity, damping, peg collision, and wall
+   * collision as the real shot. The preview therefore agrees with the neutral
+   * opening trajectory until the player changes polarity.
+   */
+  private rebuildAimPath() {
+    if (!this.world || !this.params) return;
+
+    const pegs = clonePegs(this.world.pegs);
+    const preview = createWorld(
+      pegs,
+      this.params.bipolarCycle,
+      this.params.bucketW,
+      this.params.forceK,
+    );
+    const previewHash = new PegHash(pegs);
+    launch(preview, this.aim);
+
+    this.aimPath = [{ x: LAUNCH_X, y: LAUNCH_Y }];
+    const dt = this.simDt;
+    const sampleEvery = Math.max(1, Math.round(1 / 45 / dt));
+    const steps = Math.ceil(1.05 / dt);
+
+    for (let i = 0; i < steps && preview.ball.active; i += 1) {
+      step(preview, dt, previewHash);
+      preview.events.length = 0;
+      if (i % sampleEvery === 0 || !preview.ball.active) {
+        this.aimPath.push({ x: preview.ball.x, y: preview.ball.y });
+      }
+    }
   }
 
   private fire() {
@@ -347,13 +397,17 @@ export class PlayScene extends Phaser.Scene {
     this.synth.flip(next);
     this.paintBall(next);
 
-    // Discrete, physical: a white flash and a scale pop over 120ms.
+    // Discrete, physical: a white flash and an elastic scale pop.
+    this.tweens.killTweensOf(this.ballVisual);
     this.ballCore.setTint(HEX.neutral);
+    this.ballGlow.setTint(HEX.neutral);
+    this.ballVisual.setScale(1.24);
     this.tweens.add({
-      targets: [this.ballCore, this.ballGlow],
-      scaleX: { from: this.ballCore.scaleX * 1.25, to: this.ballCore.scaleX },
-      scaleY: { from: this.ballCore.scaleY * 1.25, to: this.ballCore.scaleY },
-      duration: 120,
+      targets: this.ballVisual,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 170,
+      ease: 'Back.easeOut',
       onComplete: () => this.paintBall(this.world.ball.charge),
     });
     this.updateHud();
@@ -375,7 +429,6 @@ export class PlayScene extends Phaser.Scene {
     this.drawPegs(delta);
     this.drawAim();
     this.drawBucket();
-    this.drawPips();
     this.field.draw(this.world, delta);
     this.paintButton();
   }
@@ -405,9 +458,7 @@ export class PlayScene extends Phaser.Scene {
     const alpha = this.simDt > 0 ? Phaser.Math.Clamp(this.accumulator / this.simDt, 0, 1) : 0;
     const bx = Phaser.Math.Linear(this.prevBall.x, this.world.ball.x, alpha);
     const by = Phaser.Math.Linear(this.prevBall.y, this.world.ball.y, alpha);
-    this.ballGlow.setPosition(bx, by);
-    this.ballCore.setPosition(bx, by);
-    this.ballGlyph.setPosition(bx, by);
+    this.setBallPosition(bx, by);
     this.field.pushTrail(bx, by, this.world.ball.charge);
   }
 
@@ -425,9 +476,20 @@ export class PlayScene extends Phaser.Scene {
           if (event.pegIndex !== undefined) this.clearPegView(event.pegIndex);
           if (event.type === 'target') this.synth.target();
           else this.synth.peg(Math.min(12, this.pegsCleared % 12));
+          this.bounceBallVisual(event.type === 'target' ? 1.18 : 1);
+          this.impactBurst(
+            event.x,
+            event.y,
+            event.type === 'target' ? HEX.amber : chargeHex(this.world.ball.charge),
+            event.type === 'target' ? 9 : 5,
+          );
           this.popScore(event.x, event.y, base * multiplier, multiplier > 1);
           break;
         }
+        case 'wall':
+          this.bounceBallVisual(0.72);
+          this.impactBurst(event.x, event.y, chargeHex(this.world.ball.charge), 3);
+          break;
         case 'orbit':
           this.popScore(event.x, event.y, 0, true, 'ORBIT x2');
           this.synth.tone(880, 0.18, 0.04, 220, 'triangle');
@@ -467,9 +529,11 @@ export class PlayScene extends Phaser.Scene {
     });
     this.tweens.add({
       targets: view.core,
-      scaleX: 0,
-      scaleY: 0,
+      scaleX: view.core.scaleX * 1.7,
+      scaleY: view.core.scaleY * 1.7,
+      alpha: 0,
       duration: 180,
+      ease: 'Cubic.easeOut',
       onComplete: () => view.core.setVisible(false),
     });
   }
@@ -491,9 +555,8 @@ export class PlayScene extends Phaser.Scene {
     this.world.ball.y = LAUNCH_Y;
     this.world.ball.charge = 0;
     this.paintBall(0);
-    this.ballGlow.setPosition(LAUNCH_X, LAUNCH_Y);
-    this.ballCore.setPosition(LAUNCH_X, LAUNCH_Y);
-    this.ballGlyph.setPosition(LAUNCH_X, LAUNCH_Y);
+    this.setBallPosition(LAUNCH_X, LAUNCH_Y, true);
+    this.rebuildAimPath();
     this.updateHud();
   }
 
@@ -510,9 +573,7 @@ export class PlayScene extends Phaser.Scene {
       this.level += 1;
       this.loadLevel(this.level);
       this.state = 'aiming';
-      this.ballGlow.setPosition(LAUNCH_X, LAUNCH_Y);
-      this.ballCore.setPosition(LAUNCH_X, LAUNCH_Y);
-      this.ballGlyph.setPosition(LAUNCH_X, LAUNCH_Y);
+      this.setBallPosition(LAUNCH_X, LAUNCH_Y, true);
       this.paintBall(0);
     });
   }
@@ -562,18 +623,27 @@ export class PlayScene extends Phaser.Scene {
 
   private drawAim() {
     this.aimGfx.clear();
-    // Launcher body.
-    this.aimGfx.fillStyle(HEX.wall, 1);
-    this.aimGfx.fillCircle(LAUNCH_X, LAUNCH_Y, 13);
-    this.aimGfx.fillStyle(HEX.neutral, 0.75);
-    this.aimGfx.fillCircle(LAUNCH_X, LAUNCH_Y, 5);
+    // Hollow launcher: a neon origin, not another ball/ammo indicator.
+    this.aimGfx.lineStyle(10, HEX.posGlow, 0.09);
+    this.aimGfx.strokeCircle(LAUNCH_X, LAUNCH_Y, 18);
+    this.aimGfx.lineStyle(2, HEX.posCyan, 0.82);
+    this.aimGfx.strokeCircle(LAUNCH_X, LAUNCH_Y, 15);
     if (this.state !== 'aiming') return;
 
-    const dx = Math.sin(this.aim);
-    const dy = Math.cos(this.aim);
-    this.aimGfx.fillStyle(HEX.neutral, 0.5);
-    for (let d = 26; d < 130; d += 13) {
-      this.aimGfx.fillCircle(LAUNCH_X + dx * d, LAUNCH_Y + dy * d, 2.2 - d / 110);
+    // Glow pass, followed by a crisp core pass. Both use the exact simulated path.
+    for (let i = 1; i < this.aimPath.length; i += 1) {
+      const from = this.aimPath[i - 1]!;
+      const to = this.aimPath[i]!;
+      const fade = 1 - i / this.aimPath.length;
+      this.aimGfx.lineStyle(8, HEX.posGlow, 0.12 * fade);
+      this.aimGfx.lineBetween(from.x, from.y, to.x, to.y);
+    }
+    for (let i = 1; i < this.aimPath.length; i += 1) {
+      const from = this.aimPath[i - 1]!;
+      const to = this.aimPath[i]!;
+      const fade = 1 - i / this.aimPath.length;
+      this.aimGfx.lineStyle(1.8, HEX.neutral, 0.82 * fade);
+      this.aimGfx.lineBetween(from.x, from.y, to.x, to.y);
     }
   }
 
@@ -586,53 +656,97 @@ export class PlayScene extends Phaser.Scene {
     this.bucketGfx.fillRect(this.world.bucketX - half, BUCKET_Y, this.world.bucketW, BUCKET_H);
   }
 
-  /** The only bright HUD element: pips drain toward white as they are spent. */
-  private drawPips() {
-    this.pipGfx.clear();
-    if (this.state === 'intro') return;
-    const max = this.params.maxPips;
-    const spacing = 17;
-    const startX = W / 2 - ((max - 1) * spacing) / 2;
-    const color = chargeHex(this.world.ball.charge);
-    for (let i = 0; i < max; i += 1) {
-      const x = startX + i * spacing;
-      if (i < this.pips) {
-        this.pipGfx.fillStyle(color, 0.9);
-        this.pipGfx.fillCircle(x, PIP_Y, 4.5);
-      } else {
-        this.pipGfx.lineStyle(1, HEX.neutral, 0.25);
-        this.pipGfx.strokeCircle(x, PIP_Y, 4.5);
-      }
-    }
-  }
-
   private paintBall(charge: number) {
     const color = chargeHex(charge);
     this.ballCore.setTint(color);
     this.ballGlow.setTint(color);
-    this.ballGlow.setAlpha(charge === 0 ? 0.3 : 0.5);
+    this.ballGlow.setAlpha(charge === 0 ? 0.38 : 0.7);
     this.ballGlyph.setText(charge > 0 ? '+' : charge < 0 ? '−' : '○');
   }
 
   private paintButton() {
-    const enabled = this.state === 'flight' && this.pips > 0 && this.time.now >= this.nextFlipAt;
+    const inFlight = this.state === 'flight';
+    const hasFlux = this.pips > 0;
+    const enabled = inFlight && hasFlux && this.time.now >= this.nextFlipAt;
     const next: Charge = this.lastCharge === 1 ? -1 : 1;
-    const color = enabled ? chargeHex(next) : HEX.pegDim;
+    const color = hasFlux ? chargeHex(next) : HEX.pegDim;
 
     this.buttonBg.clear();
-    this.buttonBg.fillStyle(color, enabled ? 0.92 : 0.35);
+    this.buttonBg.fillStyle(HEX.voidLift, 0.94);
     this.buttonBg.fillRoundedRect(-BUTTON_W / 2, -BUTTON_H / 2, BUTTON_W, BUTTON_H, 14);
-    this.buttonBg.lineStyle(2, color, enabled ? 1 : 0.5);
+    this.buttonBg.lineStyle(10, color, enabled ? 0.1 : 0.035);
     this.buttonBg.strokeRoundedRect(-BUTTON_W / 2, -BUTTON_H / 2, BUTTON_W, BUTTON_H, 14);
+    this.buttonBg.lineStyle(2, color, enabled ? 1 : 0.38);
+    this.buttonBg.strokeRoundedRect(-BUTTON_W / 2, -BUTTON_H / 2, BUTTON_W, BUTTON_H, 14);
+
+    const label = !hasFlux
+      ? 'FIELD NEUTRAL'
+      : inFlight
+        ? `FLIP ${next > 0 ? '+' : '−'}   ${this.pips} FLUX`
+        : `FLIP   ${this.pips} FLUX`;
     this.buttonLabel
-      .setText(enabled ? (next > 0 ? 'FLIP  +' : 'FLIP  −') : 'FLIP')
-      .setColor(enabled ? '#05060f' : '#8b93c4');
-    this.buttonBg.setAlpha(enabled ? 1 : 0.55);
+      .setText(label)
+      .setColor(enabled ? (next > 0 ? '#2cf6ff' : '#ff3dcc') : '#7f8bb4');
+    this.buttonBg.setAlpha(enabled ? 1 : 0.68);
   }
 
   private updateHud() {
-    this.scoreText.setText(this.score.toLocaleString('en-US'));
-    this.ballsText.setText(`BALLS ${this.ballsLeft}  ◉ ${this.world?.targetsLeft ?? 0}`);
+    this.scoreText.setText(`SCORE  ${this.score.toLocaleString('en-US')}`);
+    this.ballsText.setText(
+      `${this.ballsLeft} SHOTS  ·  ${this.world?.targetsLeft ?? 0} TARGETS`,
+    );
+  }
+
+  private setBallPosition(x: number, y: number, resetScale = false) {
+    this.ballVisual.setPosition(x, y);
+    if (resetScale) {
+      this.tweens.killTweensOf(this.ballVisual);
+      this.ballVisual.setScale(1);
+    }
+  }
+
+  private bounceBallVisual(strength: number) {
+    if (this.reducedMotion) return;
+    this.tweens.killTweensOf(this.ballVisual);
+    const mostlyVertical = Math.abs(this.world.ball.vy) >= Math.abs(this.world.ball.vx);
+    const squash = 0.82 - strength * 0.04;
+    const stretch = 1.14 + strength * 0.05;
+    this.ballVisual.setScale(
+      mostlyVertical ? stretch : squash,
+      mostlyVertical ? squash : stretch,
+    );
+    this.tweens.add({
+      targets: this.ballVisual,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 155,
+      ease: 'Back.easeOut',
+    });
+  }
+
+  private impactBurst(x: number, y: number, color: number, count: number) {
+    if (this.reducedMotion) return;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (i / count) * Math.PI * 2 + this.world.t * 0.7;
+      const distance = 18 + (i % 3) * 7;
+      const spark = this.add
+        .image(x, y, TEX.spark)
+        .setDepth(49)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(color)
+        .setAlpha(0.9);
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * distance,
+        y: y + Math.sin(angle) * distance,
+        scaleX: 0.15,
+        scaleY: 0.15,
+        alpha: 0,
+        duration: 170 + (i % 3) * 35,
+        ease: 'Cubic.easeOut',
+        onComplete: () => spark.destroy(),
+      });
+    }
   }
 
   private popScore(x: number, y: number, value: number, bright: boolean, label?: string) {
@@ -661,7 +775,7 @@ export class PlayScene extends Phaser.Scene {
       '',
       'Aim, drop the ball, then hit FLIP',
       'to steer it through the field.',
-      'White means neutral — no pips, no pull.',
+      'White means neutral — no flux, no pull.',
       '',
       'Clear every ringed peg to descend.',
       '',
@@ -671,29 +785,65 @@ export class PlayScene extends Phaser.Scene {
 
   private showOverlay(title: string, lines: string[]) {
     this.overlay?.destroy();
+    for (const view of this.pegViews) {
+      view.glow.setVisible(false);
+      view.core.setVisible(false);
+      view.ring?.setVisible(false);
+    }
+
     const panel = this.add.graphics();
-    panel.fillStyle(HEX.void, 0.88);
-    panel.fillRoundedRect(-260, -190, 520, 380, 18);
-    panel.lineStyle(2, HEX.posCyan, 0.35);
-    panel.strokeRoundedRect(-260, -190, 520, 380, 18);
+    const height = FIELD_BOTTOM - FIELD_TOP;
+    panel.fillStyle(HEX.void, 0.985);
+    panel.fillRect(-W / 2, -height / 2, W, height);
+    panel.fillStyle(HEX.posGlow, 0.035);
+    panel.fillRect(-W / 2, -height / 2, W, 150);
+    panel.lineStyle(8, HEX.posGlow, 0.08);
+    panel.lineBetween(-W / 2, -height / 2, W / 2, -height / 2);
+    panel.lineBetween(-W / 2, height / 2, W / 2, height / 2);
+    panel.lineStyle(1, HEX.posCyan, 0.6);
+    panel.lineBetween(-W / 2, -height / 2, W / 2, -height / 2);
+    panel.lineBetween(-W / 2, height / 2, W / 2, height / 2);
+
+    const halo = this.add
+      .image(0, -118, TEX.glow)
+      .setDisplaySize(500, 260)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(HEX.posGlow)
+      .setAlpha(0.15);
 
     const heading = this.add
-      .text(0, -140, title, { fontFamily: FONT, fontSize: '34px', color: '#4de5ff' })
-      .setOrigin(0.5);
+      .text(0, -126, title, { fontFamily: FONT, fontSize: '46px', color: '#2cf6ff' })
+      .setOrigin(0.5)
+      .setLetterSpacing(6)
+      .setShadow(0, 2, '#02030a', 8, true, true);
     const body = this.add
-      .text(0, 10, lines.join('\n'), {
+      .text(0, 40, lines.join('\n'), {
         fontFamily: FONT,
-        fontSize: '16px',
-        color: '#f2f5ff',
+        fontSize: '17px',
+        color: '#f7fbff',
         align: 'center',
-        lineSpacing: 6,
+        lineSpacing: 8,
       })
       .setOrigin(0.5)
-      .setAlpha(0.85);
+      .setAlpha(0.96)
+      .setShadow(0, 2, '#02030a', 6, true, true);
 
+    const centerY = (FIELD_TOP + FIELD_BOTTOM) / 2;
     this.overlay = this.add
-      .container(W / 2, (FIELD_TOP + FIELD_BOTTOM) / 2, [panel, heading, body])
-      .setDepth(200);
+      .container(W / 2, centerY, [panel, halo, heading, body])
+      .setDepth(200)
+      .setAlpha(this.reducedMotion ? 1 : 0);
+
+    if (!this.reducedMotion) {
+      this.overlay.y = centerY + 18;
+      this.tweens.add({
+        targets: this.overlay,
+        y: centerY,
+        alpha: 1,
+        duration: 280,
+        ease: 'Cubic.easeOut',
+      });
+    }
   }
 }
 

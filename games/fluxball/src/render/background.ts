@@ -13,6 +13,8 @@ const DRIFT = 3;
 export class Background {
   private readonly grid: Phaser.GameObjects.Graphics;
   private readonly vignette: Phaser.GameObjects.Image;
+  private readonly positiveAurora: Phaser.GameObjects.Image;
+  private readonly negativeAurora: Phaser.GameObjects.Image;
   private readonly walls: Phaser.GameObjects.Graphics;
   private offset = 0;
   private tint: number = HEX.pegDim;
@@ -30,13 +32,33 @@ export class Background {
       .setAlpha(0.16)
       .setTint(HEX.voidLift);
 
-    this.walls = scene.add.graphics().setDepth(-70);
+    this.positiveAurora = scene.add
+      .image(FIELD_LEFT - 24, FIELD_TOP + 160, TEX.glow)
+      .setDepth(-78)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDisplaySize(300, 470)
+      .setAlpha(0.12)
+      .setTint(HEX.posGlow);
+
+    this.negativeAurora = scene.add
+      .image(FIELD_RIGHT + 24, FIELD_BOTTOM - 170, TEX.glow)
+      .setDepth(-78)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDisplaySize(320, 500)
+      .setAlpha(0.1)
+      .setTint(HEX.negGlow);
+
+    this.walls = scene.add.graphics().setDepth(-70).setBlendMode(Phaser.BlendModes.ADD);
     this.drawWalls();
   }
 
   private drawWalls(): void {
     this.walls.clear();
-    this.walls.lineStyle(2, HEX.wall, 0.85);
+    this.walls.lineStyle(8, HEX.wall, 0.08);
+    this.walls.lineBetween(FIELD_LEFT, FIELD_TOP, FIELD_LEFT, FIELD_BOTTOM);
+    this.walls.lineBetween(FIELD_RIGHT, FIELD_TOP, FIELD_RIGHT, FIELD_BOTTOM);
+    this.walls.lineBetween(FIELD_LEFT, FIELD_TOP, FIELD_RIGHT, FIELD_TOP);
+    this.walls.lineStyle(1.5, HEX.posCyan, 0.72);
     this.walls.lineBetween(FIELD_LEFT, FIELD_TOP, FIELD_LEFT, FIELD_BOTTOM);
     this.walls.lineBetween(FIELD_RIGHT, FIELD_TOP, FIELD_RIGHT, FIELD_BOTTOM);
     this.walls.lineBetween(FIELD_LEFT, FIELD_TOP, FIELD_RIGHT, FIELD_TOP);
@@ -48,11 +70,12 @@ export class Background {
 
     const alpha = 0.5 * (1 - Math.min(0.6, depth));
     this.grid.clear();
-    this.grid.lineStyle(1, HEX.grid, alpha);
-    for (let x = FIELD_LEFT; x <= FIELD_RIGHT; x += GRID) {
+    for (let x = FIELD_LEFT, column = 0; x <= FIELD_RIGHT; x += GRID, column += 1) {
+      this.grid.lineStyle(column % 4 === 0 ? 1.4 : 0.7, HEX.grid, alpha * (column % 4 === 0 ? 0.72 : 0.34));
       this.grid.lineBetween(x, FIELD_TOP, x, FIELD_BOTTOM);
     }
-    for (let y = FIELD_TOP + this.offset; y <= FIELD_BOTTOM; y += GRID) {
+    for (let y = FIELD_TOP + this.offset, row = 0; y <= FIELD_BOTTOM; y += GRID, row += 1) {
+      this.grid.lineStyle(row % 4 === 0 ? 1.4 : 0.7, HEX.grid, alpha * (row % 4 === 0 ? 0.72 : 0.34));
       this.grid.lineBetween(FIELD_LEFT, y, FIELD_RIGHT, y);
     }
 
@@ -60,5 +83,9 @@ export class Background {
     const want = ballCharge === 0 ? HEX.voidLift : chargeGlowHex(ballCharge);
     this.tint = mixHex(this.tint, mixHex(HEX.voidLift, want, 0.5), 0.05);
     this.vignette.setTint(this.tint);
+
+    const breathe = this.reducedMotion ? 0 : Math.sin(this.offset * 0.08) * 0.018;
+    this.positiveAurora.setAlpha((ballCharge > 0 ? 0.19 : 0.09) + breathe);
+    this.negativeAurora.setAlpha((ballCharge < 0 ? 0.19 : 0.08) - breathe);
   }
 }

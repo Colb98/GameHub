@@ -33,14 +33,14 @@ export const ANCHOR_RADIUS = 11;
 
 /** Physics (plan §2.2). */
 export const GRAVITY = 900;
-export const FORCE_K = 2.6e5;
-export const FORCE_RADIUS = 120;
-export const FORCE_R_MIN = 26;
-export const FORCE_ACCEL_MAX = 4 * GRAVITY;
+export const FORCE_K = 4.1e5;
+export const FORCE_RADIUS = 148;
+export const FORCE_R_MIN = 24;
+export const FORCE_ACCEL_MAX = 6 * GRAVITY;
 /** Only the strongest N pegs pull on the ball, so dense clusters stay readable. */
-export const MAX_INFLUENCERS = 6;
-export const DAMPING = 0.9985;
-export const RESTITUTION = 0.7;
+export const MAX_INFLUENCERS = 7;
+export const DAMPING = 0.9992;
+export const RESTITUTION = 0.86;
 
 /** Fixed timestep (plan §4). */
 export const SIM_HZ = 240;

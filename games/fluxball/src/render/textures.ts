@@ -18,7 +18,7 @@ export const TEX = {
  */
 export function createTextures(scene: Phaser.Scene): void {
   bakeGlow(scene);
-  bakeCircle(scene, TEX.core, 32, 14, PALETTE.neutral);
+  bakeOutlineCircle(scene, TEX.core, 40, 14, 3, PALETTE.neutral);
   bakeCircle(scene, TEX.ball, 32, 10, PALETTE.neutral);
   bakeCircle(scene, TEX.spark, 12, 3, PALETTE.neutral);
   bakeRing(scene);
@@ -60,6 +60,26 @@ function bakeCircle(
   texture.refresh();
 }
 
+function bakeOutlineCircle(
+  scene: Phaser.Scene,
+  key: string,
+  size: number,
+  radius: number,
+  width: number,
+  color: string,
+): void {
+  if (scene.textures.exists(key)) return;
+  const texture = scene.textures.createCanvas(key, size, size);
+  if (!texture) return;
+  const ctx = texture.getContext();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  texture.refresh();
+}
+
 function bakeRing(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.ring)) return;
   const size = 48;
@@ -77,19 +97,19 @@ function bakeRing(scene: Phaser.Scene): void {
 
 function bakeAnchor(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.anchor)) return;
-  const size = 40;
+  const size = 48;
   const texture = scene.textures.createCanvas(TEX.anchor, size, size);
   if (!texture) return;
   const ctx = texture.getContext();
-  ctx.fillStyle = PALETTE.violet;
+  ctx.strokeStyle = PALETTE.violet;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, 15, 0, Math.PI * 2);
-  ctx.fill();
-  // Dark core: reads as "permanent, not clearable".
-  ctx.globalCompositeOperation = 'destination-out';
+  ctx.arc(size / 2, size / 2, 17, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = 'source-over';
+  ctx.arc(size / 2, size / 2, 10, 0, Math.PI * 2);
+  ctx.stroke();
   texture.refresh();
 }

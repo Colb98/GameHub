@@ -6,7 +6,7 @@ import { chargeHex } from './palette';
 
 const DASH = 7;
 const GAP = 6;
-const TRAIL_LENGTH = 14;
+const TRAIL_LENGTH = 20;
 
 interface TrailPoint {
   x: number;
@@ -46,7 +46,7 @@ export class FieldLines {
     for (const influence of world.influences) {
       const peg = world.pegs[influence.pegIndex];
       if (!peg || peg.cleared) continue;
-      const alpha = Math.min(0.5, Math.max(0.05, Math.abs(influence.accel) / FORCE_ACCEL_MAX));
+      const alpha = Math.min(0.78, Math.max(0.1, Math.abs(influence.accel) / FORCE_ACCEL_MAX));
       const color = chargeHex(pegCharge(peg, world.t, world.bipolarCycle));
       // accel < 0 is attraction: dashes crawl toward the ball.
       this.dashedLine(peg.x, peg.y, world.ball.x, world.ball.y, color, alpha, influence.accel < 0);
@@ -72,7 +72,7 @@ export class FieldLines {
     const drift = (this.phase * 46) % period;
     let start = toBall ? -drift : drift - period;
 
-    this.gfx.lineStyle(1.5, color, alpha);
+    this.gfx.lineStyle(2.2, color, alpha);
     while (start < length) {
       const a = Math.max(0, start);
       const b = Math.min(length, start + DASH);
@@ -87,7 +87,7 @@ export class FieldLines {
     for (let i = 0; i < this.trail.length; i += 1) {
       const point = this.trail[i]!;
       const t = i / TRAIL_LENGTH;
-      this.gfx.lineStyle(1 + t * 4, chargeHex(point.charge), t * 0.5);
+      this.gfx.lineStyle(1 + t * 5, chargeHex(point.charge), t * 0.62);
       const next = this.trail[i + 1];
       if (next) this.gfx.lineBetween(point.x, point.y, next.x, next.y);
     }
