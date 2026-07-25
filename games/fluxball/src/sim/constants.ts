@@ -59,3 +59,6 @@ export const SCORE_PEG = 100;
 export const SCORE_TARGET = 500;
 export const SCORE_BUCKET = 1000;
 export const ORBIT_MULTIPLIER = 2;
+/** Repeatable assist: either clear route awards one extra shot, then both reset. */
+export const BONUS_SHOT_TARGETS = 5;
+export const BONUS_SHOT_NORMAL_PEGS = 20;

@@ -122,16 +122,16 @@ const GAMES: SeedGame[] = [
     en: {
       name: 'Fluxball',
       shortIntro:
-        'Every peg carries a charge. Drop the ball, then flip its polarity mid-flight to pull and push your way through a field that rebuilds itself harder each level.',
+        'Every peg carries a charge. Choose a starting polarity, then switch it mid-flight to pull and push your way through a field that rebuilds itself harder each level.',
       controlsHtml:
-        '<p><b>Move the mouse</b> or <b>drag</b> to aim, then <b>tap the field</b> to drop the ball. Hit <b>FLIP</b> (or <b>Space</b> / <b>F</b>) in mid-flight to reverse the ball\'s charge — same colours push apart, opposite colours pull together. Each flip costs a pip; hitting a peg refunds one. At zero pips the ball turns white and stops responding to the field. Clear every ringed peg to descend.</p>',
+        '<p>Choose <b>NEUTRAL</b>, <b>+</b>, or <b>−</b>, then <b>move the mouse</b> or <b>drag</b> to aim and <b>tap the field</b> to launch. You can switch polarity again in flight; keys <b>1 / 2 / 3</b> select directly, while <b>Space</b> or <b>F</b> cycles. Matching charges repel and opposites attract. Entering + or − spends one FLUX, NEUTRAL is free, and peg hits restore FLUX. Earn +1 shot by clearing 5 target pegs or 20 non-target pegs. Clear every ringed peg to descend.</p>',
     },
     vi: {
       name: 'Bóng Từ Trường',
       shortIntro:
-        'Mỗi chốt mang một điện tích. Thả bóng rồi đảo cực giữa đường bay để hút và đẩy nó xuyên qua mê cung tự sinh, mỗi màn một khó hơn.',
+        'Mỗi chốt mang một điện tích. Chọn cực ban đầu rồi đổi cực giữa đường bay để hút và đẩy bóng xuyên qua mê cung tự sinh, mỗi màn một khó hơn.',
       controlsHtml:
-        '<p><b>Di chuột</b> hoặc <b>kéo</b> để ngắm, rồi <b>chạm vào sân</b> để thả bóng. Nhấn <b>FLIP</b> (hoặc <b>Space</b> / <b>F</b>) khi bóng đang bay để đảo cực — cùng màu thì đẩy nhau, khác màu thì hút nhau. Mỗi lần đảo tốn một chấm năng lượng; chạm vào chốt sẽ hoàn lại một chấm. Hết năng lượng, bóng chuyển trắng và không còn chịu tác động của từ trường. Phá hết các chốt có vòng để xuống màn tiếp theo.</p>',
+        '<p>Chọn <b>NEUTRAL</b>, <b>+</b> hoặc <b>−</b>, sau đó <b>di chuột</b> hoặc <b>kéo</b> để ngắm và <b>chạm vào sân</b> để thả bóng. Bạn vẫn có thể đổi cực khi bóng đang bay; phím <b>1 / 2 / 3</b> chọn trực tiếp, còn <b>Space</b> hoặc <b>F</b> chuyển vòng. Cùng dấu thì đẩy nhau, trái dấu thì hút nhau. Chuyển sang + hoặc − tốn một FLUX, NEUTRAL miễn phí, và chạm chốt sẽ hồi lại FLUX. Nhận thêm 1 lượt khi phá 5 chốt mục tiêu hoặc 20 chốt thường. Phá hết các chốt có vòng để xuống màn tiếp theo.</p>',
     },
   },
 ];

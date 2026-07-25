@@ -49,7 +49,7 @@ function makeBall(): Ball {
     y: LAUNCH_Y,
     vx: 0,
     vy: 0,
-    // The ball launches neutral, so the opening of every shot is pure ballistics.
+    // The launcher rests neutral until the player selects a starting polarity.
     charge: 0,
     radius: BALL_RADIUS,
     active: false,
@@ -57,13 +57,13 @@ function makeBall(): Ball {
 }
 
 /** `angle` is measured from straight down, positive to the right. */
-export function launch(world: World, angle: number): void {
+export function launch(world: World, angle: number, charge: Charge = 0): void {
   const ball = world.ball;
   ball.x = LAUNCH_X;
   ball.y = LAUNCH_Y;
   ball.vx = Math.sin(angle) * LAUNCH_SPEED;
   ball.vy = Math.cos(angle) * LAUNCH_SPEED;
-  ball.charge = 0;
+  ball.charge = charge;
   ball.active = true;
   world.t = 0;
   world.magnetDead = false;
