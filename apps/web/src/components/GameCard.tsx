@@ -1,10 +1,10 @@
 import { Link } from '@/i18n/routing';
-import { coverGradient, isNewGame } from '@/lib/cover';
+import { coverGradient, gameMediaUrl, isNewGame } from '@/lib/cover';
 import type { GameCard as GameCardType } from '@/lib/types';
 import { FavoriteButton } from './FavoriteButton';
 
-/** Prototype game card: gradient cover with badge + favorite overlay, then a
- *  display-font title and a rating/plays meta row. */
+/** Game card: uploaded banner (cropped to fill) or the generated fallback cover,
+ *  then a display-font title and a rating/plays meta row. */
 export function GameCard({
   game,
   showMeta = true,
@@ -12,6 +12,8 @@ export function GameCard({
   game: GameCardType;
   showMeta?: boolean;
 }) {
+  const bannerUrl = gameMediaUrl(game.bannerPath);
+
   return (
     <Link
       href={`/games/${game.slug}`}
@@ -19,11 +21,19 @@ export function GameCard({
     >
       <div
         className="relative aspect-[4/3] overflow-hidden rounded-xl transition group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_18px_rgba(0,0,0,.12)]"
-        style={{ background: coverGradient(game.slug) }}
+        style={bannerUrl ? undefined : { background: coverGradient(game.slug) }}
       >
-        <span className="absolute inset-0 flex items-center justify-center px-2 text-center font-display text-base font-bold break-words text-black/45 dark:text-white/70">
-          {game.name}
-        </span>
+        {bannerUrl ? (
+          <img
+            src={bannerUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center px-2 text-center font-display text-base font-bold break-words text-black/45 dark:text-white/70">
+            {game.name}
+          </span>
+        )}
         {isNewGame(game.releaseDate) && (
           <span className="absolute top-2 left-2 rounded-md bg-accent px-2 py-[3px] text-[9px] font-bold text-white">
             NEW

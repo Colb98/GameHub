@@ -36,6 +36,7 @@ export function toGameCard(game: GameWithI18n, locale: string) {
     ratingCount: game.ratingCount,
     releaseDate: game.releaseDate,
     featuredRank: game.featuredRank,
+    bannerPath: game.bannerPath,
   };
 }
 

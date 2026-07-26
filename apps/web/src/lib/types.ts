@@ -10,6 +10,7 @@ export interface GameCard {
   ratingCount: number;
   releaseDate: string | null;
   featuredRank: number | null;
+  bannerPath: string | null;
 }
 
 export interface CategoryCount {
@@ -22,7 +23,6 @@ export interface GameDetail extends GameCard {
   maxScore: number | null;
   developerName: string;
   controlsHtml: string;
-  bannerPath: string | null;
   screenshots: { id: string; path: string; altText: string | null }[];
   activeVersion: { semver: string; path: string } | null;
   isFavorite: boolean;

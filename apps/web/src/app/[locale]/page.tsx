@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
 import { apiGet } from '@/lib/server-api';
-import { coverGradient } from '@/lib/cover';
+import { coverGradient, gameMediaUrl } from '@/lib/cover';
 import type { CategoryCount, GameCard as GameCardType } from '@/lib/types';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { FavoritesRail } from '@/components/FavoritesRail';
@@ -21,11 +21,20 @@ function Hero({
   detailsLabel: string;
   featuredLabel: string;
 }) {
+  const bannerUrl = gameMediaUrl(game.bannerPath);
+
   return (
     <section
       className="relative h-[150px] overflow-hidden rounded-2xl lg:h-[220px]"
-      style={{ background: coverGradient(game.slug) }}
+      style={bannerUrl ? undefined : { background: coverGradient(game.slug) }}
     >
+      {bannerUrl && (
+        <img
+          src={bannerUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent to-60%" />
       <div className="absolute top-3 right-3 lg:top-4 lg:right-4">
         <FavoriteButton game={{ id: game.id, name: game.name }} size="lg" />
