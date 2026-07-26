@@ -88,20 +88,16 @@ export default async function GamePage({
           <h3 className="mb-2.5 font-display text-[15px] font-semibold text-ink">
             {t('screenshots')}
           </h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex gap-3 overflow-x-auto pb-3">
             {game.screenshots.map((screenshot) => {
               const url = gameMediaUrl(screenshot.path);
               return url ? (
-                <div
+                <img
                   key={screenshot.id}
-                  className="relative aspect-video overflow-hidden rounded-xl bg-chip"
-                >
-                  <img
-                    src={url}
-                    alt={screenshot.altText ?? game.name}
-                    className="absolute inset-0 h-full w-full object-contain"
-                  />
-                </div>
+                  src={url}
+                  alt={screenshot.altText ?? game.name}
+                  className="h-[220px] w-auto max-w-none shrink-0 rounded-xl object-contain lg:h-[280px]"
+                />
               ) : null;
             })}
           </div>
