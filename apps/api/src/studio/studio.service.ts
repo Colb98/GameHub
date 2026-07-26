@@ -10,7 +10,12 @@ import * as fs from 'fs';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGameDto, UpdateGameDto } from './dto';
-import { extractGameBundle, storageRoot } from './zip.util';
+import {
+  extractGameBundle,
+  parseGamePackage,
+  storageRoot,
+  writeGameBundle,
+} from './zip.util';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+$/;
 
@@ -61,6 +66,134 @@ export class StudioService {
       },
       include: { translations: true },
     });
+  }
+
+  async importGamePackage(developerId: string, zipBuffer: Buffer) {
+    const gamePackage = parseGamePackage(zipBuffer);
+    const { metadata } = gamePackage;
+    const existing = await this.prisma.game.findUnique({
+      where: { slug: metadata.slug },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException('Slug already taken');
+
+    const bundlePath = `${metadata.slug}/${metadata.version}`;
+    const bundleDirectory = path.join(
+      storageRoot(),
+      metadata.slug,
+      metadata.version,
+    );
+    let gameId: string | undefined;
+    let bundleWriteStarted = false;
+
+    try {
+      const game = await this.prisma.game.create({
+        data: {
+          slug: metadata.slug,
+          developerId,
+          category: metadata.category,
+          orientation: metadata.orientation,
+          scoreOrder: metadata.scoreOrder,
+          maxScore: metadata.maxScore,
+          translations: {
+            create: [
+              {
+                locale: 'en',
+                name: metadata.name,
+                shortIntro: metadata.description,
+                controlsHtml: metadata.controls,
+              },
+              {
+                locale: 'vi',
+                name: metadata.nameVi ?? metadata.name,
+                shortIntro: metadata.descriptionVi ?? metadata.description,
+                controlsHtml: metadata.controlsVi ?? metadata.controls,
+              },
+            ],
+          },
+          versions: {
+            create: {
+              semver: metadata.version,
+              bundlePath,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      gameId = game.id;
+
+      bundleWriteStarted = true;
+      writeGameBundle(gamePackage.bundleFiles, bundleDirectory);
+
+      const mediaDirectory = path.join(storageRoot(), 'game-media', game.id);
+      fs.mkdirSync(mediaDirectory, { recursive: true });
+      const bannerPath = path.posix.join(
+        'game-media',
+        game.id,
+        `banner-${randomBytes(8).toString('hex')}.${gamePackage.banner.extension}`,
+      );
+      fs.writeFileSync(
+        path.resolve(storageRoot(), bannerPath),
+        gamePackage.banner.data,
+      );
+
+      const screenshots = gamePackage.screenshots.map((image, index) => {
+        const relativePath = path.posix.join(
+          'game-media',
+          game.id,
+          `screenshot-${randomBytes(8).toString('hex')}.${image.extension}`,
+        );
+        fs.writeFileSync(path.resolve(storageRoot(), relativePath), image.data);
+        return {
+          path: relativePath,
+          altText: metadata.name,
+          sortOrder: index,
+        };
+      });
+
+      return await this.prisma.game.update({
+        where: { id: game.id },
+        data: {
+          bannerPath,
+          screenshots: { create: screenshots },
+        },
+        include: {
+          translations: true,
+          versions: { orderBy: { uploadedAt: 'desc' } },
+          screenshots: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
+    } catch (error) {
+      if (bundleWriteStarted) {
+        try {
+          fs.rmSync(bundleDirectory, { recursive: true, force: true });
+        } catch {
+          // Preserve the import failure while continuing the remaining cleanup.
+        }
+      }
+      if (gameId) {
+        try {
+          fs.rmSync(path.join(storageRoot(), 'game-media', gameId), {
+            recursive: true,
+            force: true,
+          });
+        } catch {
+          // Preserve the import failure while continuing the database cleanup.
+        }
+        await this.prisma.game.delete({ where: { id: gameId } }).catch(() => {
+          // Preserve the original import error if cleanup also fails.
+        });
+      }
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Slug already taken');
+      }
+      throw error;
+    }
   }
 
   async myGames(developerId: string) {

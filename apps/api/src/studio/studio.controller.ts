@@ -37,6 +37,17 @@ export class StudioController {
     return this.studio.createGame(p.userId!, dto);
   }
 
+  @Post('import')
+  async importPackage(
+    @CurrentPrincipal() p: Principal,
+    @Req() req: FastifyRequest,
+  ) {
+    const file = await (req as any).file();
+    if (!file) throw new BadRequestException('Missing package zip file');
+    const buffer: Buffer = await file.toBuffer();
+    return this.studio.importGamePackage(p.userId!, buffer);
+  }
+
   @Patch(':id')
   update(
     @CurrentPrincipal() p: Principal,
