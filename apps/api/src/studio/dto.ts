@@ -51,7 +51,7 @@ export class CreateGameDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  maxScore?: number;
+  maxScore?: number | null;
 
   @IsArray()
   @ArrayMinSize(1)

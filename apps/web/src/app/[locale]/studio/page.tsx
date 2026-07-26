@@ -142,6 +142,9 @@ function StudioGameRow({
             → {game.slug}
           </Link>
         )}
+        <Link href={`/studio/${game.id}`} className="text-sm text-indigo-300 underline">
+          {t('editInfo')}
+        </Link>
       </div>
       {game.rejectReason && (
         <p className="rounded border border-rose-500/40 bg-rose-500/10 p-2 text-sm text-rose-700 dark:text-rose-300">

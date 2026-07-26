@@ -11,6 +11,12 @@ export function coverGradient(slug: string, offset = 0): string {
   return `linear-gradient(135deg, oklch(var(--cover-l1) var(--cover-c1) ${h}), oklch(var(--cover-l2) var(--cover-c2) ${(h + 35) % 360}))`;
 }
 
+export function gameMediaUrl(mediaPath: string | null | undefined): string | null {
+  if (!mediaPath) return null;
+  const base = process.env.NEXT_PUBLIC_GAMES_BASE_URL ?? 'http://localhost:4000/g';
+  return `${base.replace(/\/$/, '')}/${mediaPath}`;
+}
+
 const NEW_BADGE_DAYS = 21;
 
 /** "NEW" badge for games released within the last three weeks. */

@@ -24,6 +24,7 @@ export class AdminService {
       include: {
         translations: true,
         versions: { orderBy: { uploadedAt: 'desc' } },
+        screenshots: { orderBy: { sortOrder: 'asc' } },
         developer: { select: { id: true, displayName: true, email: true } },
       },
       orderBy: { updatedAt: 'desc' },
@@ -36,6 +37,7 @@ export class AdminService {
       include: {
         translations: true,
         versions: { orderBy: { uploadedAt: 'desc' } },
+        screenshots: { orderBy: { sortOrder: 'asc' } },
         developer: { select: { id: true, displayName: true, email: true } },
       },
     });

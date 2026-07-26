@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -24,6 +25,11 @@ export class StudioController {
   @Get()
   myGames(@CurrentPrincipal() p: Principal) {
     return this.studio.myGames(p.userId!);
+  }
+
+  @Get(':id')
+  get(@CurrentPrincipal() p: Principal, @Param('id') id: string) {
+    return this.studio.getGame(p.userId!, id);
   }
 
   @Post()
@@ -51,6 +57,37 @@ export class StudioController {
     if (!file) throw new BadRequestException('Missing zip file');
     const buffer: Buffer = await file.toBuffer();
     return this.studio.uploadVersion(p.userId!, id, semver ?? '', buffer);
+  }
+
+  @Post(':id/banner')
+  async uploadBanner(
+    @CurrentPrincipal() p: Principal,
+    @Param('id') id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    const file = await (req as any).file();
+    if (!file) throw new BadRequestException('Missing image file');
+    return this.studio.uploadBanner(p.userId!, id, file);
+  }
+
+  @Post(':id/screenshots')
+  async uploadScreenshot(
+    @CurrentPrincipal() p: Principal,
+    @Param('id') id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    const file = await (req as any).file();
+    if (!file) throw new BadRequestException('Missing image file');
+    return this.studio.uploadScreenshot(p.userId!, id, file);
+  }
+
+  @Delete(':id/screenshots/:screenshotId')
+  removeScreenshot(
+    @CurrentPrincipal() p: Principal,
+    @Param('id') id: string,
+    @Param('screenshotId') screenshotId: string,
+  ) {
+    return this.studio.removeScreenshot(p.userId!, id, screenshotId);
   }
 
   @Post(':id/submit')

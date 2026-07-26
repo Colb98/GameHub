@@ -19,8 +19,11 @@ export interface CategoryCount {
 
 export interface GameDetail extends GameCard {
   scoreOrder: 'DESC' | 'ASC';
+  maxScore: number | null;
   developerName: string;
   controlsHtml: string;
+  bannerPath: string | null;
+  screenshots: { id: string; path: string; altText: string | null }[];
   activeVersion: { semver: string; path: string } | null;
   isFavorite: boolean;
   myRating: number | null;
@@ -92,10 +95,14 @@ export interface StudioGame {
   slug: string;
   status: string;
   category: string;
-  orientation: string;
+  orientation: 'LANDSCAPE' | 'PORTRAIT' | 'BOTH';
+  scoreOrder: 'DESC' | 'ASC';
+  maxScore: number | null;
   rejectReason: string | null;
   /** Set while a new version of a published game awaits admin review */
   updateSubmittedAt: string | null;
+  bannerPath: string | null;
+  screenshots: { id: string; path: string; altText: string | null }[];
   translations: {
     locale: string;
     name: string;

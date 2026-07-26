@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { apiGet } from '@/lib/server-api';
-import { coverGradient } from '@/lib/cover';
+import { coverGradient, gameMediaUrl } from '@/lib/cover';
 import type { GameCard as GameCardType, GameDetail } from '@/lib/types';
 import { GameCard } from '@/components/GameCard';
 import { DetailActions, RatingStars } from '@/components/GameActions';
@@ -24,6 +24,7 @@ export default async function GamePage({
     apiGet<GameCardType[]>(`/games/${slug}/suggestions?locale=${locale}`),
   ]);
   if (!game) notFound();
+  const bannerUrl = gameMediaUrl(game.bannerPath);
 
   return (
     <div className="flex flex-col gap-6 lg:gap-7">
@@ -31,11 +32,15 @@ export default async function GamePage({
       <section className="flex flex-col gap-4 lg:flex-row lg:gap-7">
         <div
           className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-2xl lg:aspect-[4/3] lg:w-[380px] lg:shrink-0"
-          style={{ background: coverGradient(game.slug) }}
+          style={bannerUrl ? undefined : { background: coverGradient(game.slug) }}
         >
-          <span className="px-6 text-center font-display text-2xl font-bold text-black/45 dark:text-white/70">
-            {game.name}
-          </span>
+          {bannerUrl ? (
+            <img src={bannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <span className="px-6 text-center font-display text-2xl font-bold text-black/45 dark:text-white/70">
+              {game.name}
+            </span>
+          )}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -77,6 +82,27 @@ export default async function GamePage({
           </div>
         </div>
       </section>
+
+      {game.screenshots.length > 0 && (
+        <section>
+          <h3 className="mb-2.5 font-display text-[15px] font-semibold text-ink">
+            {t('screenshots')}
+          </h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {game.screenshots.map((screenshot) => {
+              const url = gameMediaUrl(screenshot.path);
+              return url ? (
+                <img
+                  key={screenshot.id}
+                  src={url}
+                  alt={screenshot.altText ?? game.name}
+                  className="aspect-video w-full rounded-xl object-cover"
+                />
+              ) : null;
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Controls */}
       <section>

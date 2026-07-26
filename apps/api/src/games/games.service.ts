@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Game, GameTranslation, GameVersion, Prisma } from '@prisma/client';
+import { Game, GameScreenshot, GameTranslation, GameVersion, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Principal } from '../common/types';
 
@@ -7,6 +7,7 @@ const HOT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type GameWithI18n = Game & {
   translations: GameTranslation[];
+  screenshots?: GameScreenshot[];
   versions?: GameVersion[];
 };
 
@@ -89,6 +90,7 @@ export class GamesService {
       include: {
         translations: true,
         versions: { where: { isActive: true }, take: 1 },
+        screenshots: { orderBy: { sortOrder: 'asc' } },
         developer: { select: { displayName: true } },
       },
     });
@@ -119,6 +121,7 @@ export class GamesService {
       category: game.category,
       orientation: game.orientation,
       scoreOrder: game.scoreOrder,
+      maxScore: game.maxScore,
       releaseDate: game.releaseDate,
       playCount: game.playCount,
       ratingAvg: game.ratingAvg,
@@ -127,6 +130,12 @@ export class GamesService {
       name: t?.name ?? game.slug,
       shortIntro: t?.shortIntro ?? '',
       controlsHtml: t?.controlsHtml ?? '',
+      bannerPath: game.bannerPath,
+      screenshots: game.screenshots.map((s) => ({
+        id: s.id,
+        path: s.path,
+        altText: s.altText,
+      })),
       activeVersion: version
         ? { semver: version.semver, path: `${version.bundlePath}/${version.entryHtml}` }
         : null,

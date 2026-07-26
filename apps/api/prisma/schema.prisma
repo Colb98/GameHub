@@ -121,11 +121,13 @@ model Game {
   ratingCount       Int               @default(0)
   featuredRank      Int?
   rejectReason      String?
+  bannerPath        String?
   /// When set, a newly uploaded version of this PUBLISHED game awaits admin review
   updateSubmittedAt DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   translations      GameTranslation[]
+  screenshots       GameScreenshot[]
   versions          GameVersion[]
   sessions          PlaySession[]
   scores            Score[]
@@ -144,6 +146,16 @@ model GameTranslation {
   controlsHtml String
 
   @@unique([gameId, locale])
+}
+
+model GameScreenshot {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  path      String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 model GameVersion {
