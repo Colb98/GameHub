@@ -116,6 +116,25 @@ const GAMES: SeedGame[] = [
     },
   },
   {
+    slug: 'prism-drop',
+    category: 'arcade',
+    orientation: 'PORTRAIT',
+    en: {
+      name: 'Prism Drop',
+      shortIntro:
+        'Accept a color hazard to become it, then disable every matching platform until your color changes again.',
+      controlsHtml:
+        '<p><b>Hold the left or right half</b> of the screen, or use <b>A / D</b> and the arrow keys, to steer. Your body color disables every matching platform; every platform triggers only once. Land on all five colors to earn three protected drops.</p>',
+    },
+    vi: {
+      name: 'Rơi Lăng Kính',
+      shortIntro:
+        'Chấp nhận hiểm họa của một màu để hóa thành màu đó, rồi vô hiệu hóa mọi bệ cùng màu cho đến khi bạn đổi màu lần nữa.',
+      controlsHtml:
+        '<p><b>Giữ nửa trái hoặc nửa phải</b> màn hình, hoặc dùng <b>A / D</b> và phím mũi tên, để di chuyển. Màu cơ thể vô hiệu hóa mọi bệ cùng màu; mỗi bệ chỉ kích hoạt một lần. Hạ cánh trên cả năm màu để nhận ba lần rơi được bảo vệ.</p>',
+    },
+  },
+  {
     slug: 'fluxball',
     category: 'arcade',
     orientation: 'PORTRAIT',
