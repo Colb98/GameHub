@@ -11,7 +11,7 @@ import { TokensService } from './tokens.service';
 export class PrincipalGuard implements CanActivate {
   constructor(private readonly tokens: TokensService) {}
 
-  canActivate(ctx: ExecutionContext): boolean {
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<FastifyRequest>();
     const header = req.headers.authorization;
     const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
@@ -19,11 +19,11 @@ export class PrincipalGuard implements CanActivate {
       'access_token'
     ];
     // Cookie (logged-in user) wins over a leftover guest bearer token
-    const fromCookie = this.tokens.resolvePrincipal(cookie);
+    const fromCookie = await this.tokens.resolvePrincipal(cookie);
     req.principal =
       fromCookie.userId || fromCookie.guestId
         ? fromCookie
-        : this.tokens.resolvePrincipal(bearer);
+        : await this.tokens.resolvePrincipal(bearer);
     return true;
   }
 }

@@ -51,24 +51,25 @@ enum DeveloperRequestStatus {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String?        @unique
-  passwordHash  String?
-  displayName   String
-  avatarUrl     String?
-  role          Role           @default(PLAYER)
-  locale        String         @default("en")
-  createdAt     DateTime       @default(now())
-  identities    Identity[]
-  refreshTokens RefreshToken[]
-  games         Game[]         @relation("DeveloperGames")
-  sessions      PlaySession[]
-  scores        Score[]
-  comments      Comment[]
-  ratings       Rating[]
-  favorites     Favorite[]
-  devRequests       DeveloperRequest[] @relation("UserDeveloperRequests")
-  reviewedRequests  DeveloperRequest[] @relation("ReviewedDeveloperRequests")
+  id               String             @id @default(cuid())
+  email            String?            @unique
+  passwordHash     String?
+  authVersion      Int                @default(0)
+  displayName      String
+  avatarUrl        String?
+  role             Role               @default(PLAYER)
+  locale           String             @default("en")
+  createdAt        DateTime           @default(now())
+  identities       Identity[]
+  refreshTokens    RefreshToken[]
+  games            Game[]             @relation("DeveloperGames")
+  sessions         PlaySession[]
+  scores           Score[]
+  comments         Comment[]
+  ratings          Rating[]
+  favorites        Favorite[]
+  devRequests      DeveloperRequest[] @relation("UserDeveloperRequests")
+  reviewedRequests DeveloperRequest[] @relation("ReviewedDeveloperRequests")
 }
 
 model Identity {
@@ -91,13 +92,14 @@ model Guest {
 }
 
 model RefreshToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  authVersion Int       @default(0)
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
 }
 
 model Game {

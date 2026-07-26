@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { api, ApiError } from '@/lib/client-api';
+import { api, ApiError, isUnauthenticatedError } from '@/lib/client-api';
 import type { GameCard } from '@/lib/types';
 import { useToast } from './Toaster';
 
@@ -52,10 +52,12 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         setIds(new Set(list.map((g) => g.id)));
         setLoggedIn(true);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
-        setFavorites([]);
-        setLoggedIn(false);
+        if (isUnauthenticatedError(error)) {
+          setFavorites([]);
+          setLoggedIn(false);
+        }
       });
     return () => {
       active = false;

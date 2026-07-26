@@ -17,7 +17,14 @@ import { Principal } from '../common/types';
 import { AuthResult, AuthService } from './auth.service';
 import { OAuthService } from './oauth.service';
 import { TokensService } from './tokens.service';
-import { ClaimGuestDto, GuestDto, LoginDto, RefreshDto, RegisterDto } from './dto';
+import {
+  ChangePasswordDto,
+  ClaimGuestDto,
+  GuestDto,
+  LoginDto,
+  RefreshDto,
+  RegisterDto,
+} from './dto';
 
 const STATE_COOKIE = 'oauth_state';
 
@@ -79,6 +86,22 @@ export class AuthController {
       'refresh_token'
     ];
     if (raw) await this.tokens.revokeRefreshToken(raw);
+    this.tokens.clearAuthCookies(reply);
+    return { ok: true };
+  }
+
+  @Post('change-password')
+  @UseGuards(RequireUserGuard)
+  async changePassword(
+    @CurrentPrincipal() p: Principal,
+    @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    await this.auth.changePassword(
+      p.userId!,
+      dto.currentPassword,
+      dto.newPassword,
+    );
     this.tokens.clearAuthCookies(reply);
     return { ok: true };
   }

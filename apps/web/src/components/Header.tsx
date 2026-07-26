@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link, usePathname, useRouter } from '@/i18n/routing';
-import { api, getGuest } from '@/lib/client-api';
+import { api, getGuest, isUnauthenticatedError } from '@/lib/client-api';
 import { UserProfile } from '@/lib/types';
 import { DesktopSearch } from './Search';
 import { ThemeToggle } from './ThemeToggle';
@@ -15,7 +15,7 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null | undefined>(undefined);
   const [guestName, setGuestName] = useState<string | null>(null);
 
   // Re-check auth on every client navigation. The header lives in the
@@ -29,10 +29,12 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
         setUser(u);
         setGuestName(null);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
-        setUser(null);
-        setGuestName(getGuest()?.name ?? null);
+        if (isUnauthenticatedError(error)) {
+          setUser(null);
+          setGuestName(getGuest()?.name ?? null);
+        }
       });
     return () => {
       active = false;
@@ -86,7 +88,7 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
             {otherLocale}
           </Link>
           <ThemeToggle />
-          {user ? (
+          {user === undefined ? null : user ? (
             <>
               <Link
                 href="/profile"
@@ -134,7 +136,7 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
           </button>
           <ThemeToggle />
           <Link
-            href={user ? '/profile' : '/login'}
+            href={user === null ? '/login' : '/profile'}
             aria-label={t('profile')}
             className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-line bg-chip text-xs font-bold text-ink"
           >

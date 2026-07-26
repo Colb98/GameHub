@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
-import { api } from '@/lib/client-api';
+import { api, isUnauthenticatedError } from '@/lib/client-api';
 import type { UserProfile } from '@/lib/types';
 
 const ROLE_RANK = { PLAYER: 0, DEVELOPER: 1, MODERATOR: 2, ADMIN: 3 } as const;
@@ -16,7 +16,9 @@ export default function DeveloperPage() {
   useEffect(() => {
     api<UserProfile>('/me')
       .then(setUser)
-      .catch(() => setUser(null));
+      .catch((error) => {
+        if (isUnauthenticatedError(error)) setUser(null);
+      });
   }, []);
 
   const perks = [1, 2, 3] as const;

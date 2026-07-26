@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -37,7 +38,7 @@ export class AuthService {
         avatarUrl: user.avatarUrl,
       },
       accessToken: this.tokens.signAccessToken(user),
-      refreshToken: await this.tokens.issueRefreshToken(user.id),
+      refreshToken: await this.tokens.issueRefreshToken(user),
     };
   }
 
@@ -66,6 +67,45 @@ export class AuthService {
     const ok = await argon2.verify(user.passwordHash, password);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
     return this.toAuthResult(user);
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.passwordHash) {
+      throw new BadRequestException('This account does not use a password');
+    }
+    const currentIsValid = await argon2.verify(
+      user.passwordHash,
+      currentPassword,
+    );
+    if (!currentIsValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    if (await argon2.verify(user.passwordHash, newPassword)) {
+      throw new BadRequestException(
+        'New password must be different from the current password',
+      );
+    }
+
+    const passwordHash = await argon2.hash(newPassword);
+    const revokedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash,
+          authVersion: { increment: 1 },
+        },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt },
+      });
+    });
   }
 
   async createGuest(name: string) {

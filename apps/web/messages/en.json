@@ -237,6 +237,17 @@
     "devView": "View details",
     "studioCardTitle": "Developer tools",
     "studioCardBody": "Create games and manage your uploads in Studio.",
-    "studioCardCta": "Open Studio"
+    "studioCardCta": "Open Studio",
+    "securityTitle": "Account security",
+    "securityBody": "Use a unique password with at least eight characters.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "changePassword": "Change password",
+    "changingPassword": "Changing password…",
+    "passwordLogoutWarning": "Changing your password signs you out everywhere, including this device.",
+    "passwordMismatch": "The new passwords do not match.",
+    "passwordChanged": "Password changed. Log in again.",
+    "passwordFailed": "Password could not be changed. Try again."
   }
 }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
-import { api } from '@/lib/client-api';
+import { api, isUnauthenticatedError } from '@/lib/client-api';
 import type { StudioGame } from '@/lib/types';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -26,7 +26,9 @@ export default function StudioPage() {
   const load = useCallback(() => {
     api<StudioGame[]>('/studio/games')
       .then(setGames)
-      .catch(() => router.push('/login'));
+      .catch((error) => {
+        if (isUnauthenticatedError(error)) router.push('/login');
+      });
   }, [router]);
 
   useEffect(load, [load]);

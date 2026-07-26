@@ -22,6 +22,7 @@ export class UsersService {
         role: true,
         locale: true,
         createdAt: true,
+        passwordHash: true,
       },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -38,7 +39,12 @@ export class UsersService {
         reviewedAt: true,
       },
     });
-    return { ...user, developerRequest: devRequest };
+    const { passwordHash, ...profile } = user;
+    return {
+      ...profile,
+      hasPassword: passwordHash !== null,
+      developerRequest: devRequest,
+    };
   }
 
   /** A PLAYER applies for the DEVELOPER role. */

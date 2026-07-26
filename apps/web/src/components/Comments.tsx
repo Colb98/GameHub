@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
-import { api } from '@/lib/client-api';
+import { api, isUnauthenticatedError } from '@/lib/client-api';
 import { useToast } from './Toaster';
 import type { CommentItem, UserProfile } from '@/lib/types';
 
@@ -31,7 +31,9 @@ export function Comments({ gameId }: { gameId: string }) {
     load().catch(() => undefined);
     api<UserProfile>('/me')
       .then(setUser)
-      .catch(() => setUser(null));
+      .catch((error) => {
+        if (isUnauthenticatedError(error)) setUser(null);
+      });
   }, [load]);
 
   async function submit() {

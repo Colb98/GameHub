@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { createGameHost, type GameHost, type GameOverPayload } from '@gamehub/sdk';
 import { Link } from '@/i18n/routing';
-import { api, ensureGuest, getGuest, GAMES_BASE_URL } from '@/lib/client-api';
+import {
+  api,
+  ensureGuest,
+  getGuest,
+  GAMES_BASE_URL,
+  isUnauthenticatedError,
+} from '@/lib/client-api';
 import { coverGradient } from '@/lib/cover';
 import type { GameDetail, SubmitScoreResult, UserProfile } from '@/lib/types';
 import { Leaderboard } from './Leaderboard';
@@ -66,7 +72,8 @@ export function PlayShell({ game }: { game: GameDetail }) {
   useEffect(() => {
     api<UserProfile>('/me')
       .then((u) => setIdentity({ kind: 'user', name: u.displayName }))
-      .catch(() => {
+      .catch((error) => {
+        if (!isUnauthenticatedError(error)) return;
         const guest = getGuest();
         setIdentity(
           guest ? { kind: 'guest', name: guest.name } : { kind: 'need-name' },

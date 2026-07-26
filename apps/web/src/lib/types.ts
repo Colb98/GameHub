@@ -66,6 +66,7 @@ export interface UserProfile {
   displayName: string;
   avatarUrl: string | null;
   role: Role;
+  hasPassword: boolean;
   /** The user's latest developer-role application, if they ever made one */
   developerRequest: DeveloperRequest | null;
 }

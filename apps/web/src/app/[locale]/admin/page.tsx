@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
-import { api } from '@/lib/client-api';
+import { api, isUnauthenticatedError } from '@/lib/client-api';
 import type { AdminDeveloperRequest, StudioGame, UserProfile } from '@/lib/types';
 
 export default function AdminPage() {
@@ -18,7 +18,9 @@ export default function AdminPage() {
       .catch(() => undefined);
     api<StudioGame[]>('/admin/games')
       .then(setGames)
-      .catch(() => router.push('/login'));
+      .catch((error) => {
+        if (isUnauthenticatedError(error)) router.push('/login');
+      });
   }, [router]);
 
   if (!games) return null;

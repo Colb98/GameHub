@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Role, User } from '@prisma/client';
+import { User } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { FastifyReply } from 'fastify';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,8 +13,7 @@ const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export interface AccessPayload {
   sub: string;
   kind: 'user';
-  role: Role;
-  name: string;
+  authVersion: number;
 }
 
 export interface GuestPayload {
@@ -41,12 +40,11 @@ export class TokensService {
     return process.env.JWT_GUEST_SECRET ?? 'dev-guest-secret-change-me';
   }
 
-  signAccessToken(user: Pick<User, 'id' | 'role' | 'displayName'>): string {
+  signAccessToken(user: Pick<User, 'id' | 'authVersion'>): string {
     const payload: AccessPayload = {
       sub: user.id,
       kind: 'user',
-      role: user.role,
-      name: user.displayName,
+      authVersion: user.authVersion,
     };
     return this.jwt.sign(payload, { secret: this.secret, expiresIn: ACCESS_TTL });
   }
@@ -60,15 +58,34 @@ export class TokensService {
   }
 
   /** Tries user access token first, then guest token. Returns {} for anonymous/invalid. */
-  resolvePrincipal(rawToken: string | undefined): Principal {
+  async resolvePrincipal(rawToken: string | undefined): Promise<Principal> {
     if (!rawToken) return {};
+    let accessPayload: AccessPayload | null = null;
     try {
-      const p = this.jwt.verify<AccessPayload>(rawToken, { secret: this.secret });
-      if (p.kind === 'user') {
-        return { userId: p.sub, role: p.role, displayName: p.name };
-      }
+      accessPayload = this.jwt.verify<AccessPayload>(rawToken, {
+        secret: this.secret,
+      });
     } catch {
       /* fall through to guest */
+    }
+    if (accessPayload?.kind === 'user') {
+      // Keep database failures visible as server errors. Treating them as an
+      // anonymous session would make a transient outage look like a logout.
+      const user = await this.prisma.user.findUnique({
+        where: { id: accessPayload.sub },
+        select: {
+          id: true,
+          authVersion: true,
+          role: true,
+          displayName: true,
+        },
+      });
+      if (!user || user.authVersion !== accessPayload.authVersion) return {};
+      return {
+        userId: user.id,
+        role: user.role,
+        displayName: user.displayName,
+      };
     }
     try {
       const p = this.jwt.verify<GuestPayload>(rawToken, {
@@ -93,12 +110,15 @@ export class TokensService {
     }
   }
 
-  async issueRefreshToken(userId: string): Promise<string> {
+  async issueRefreshToken(
+    user: Pick<User, 'id' | 'authVersion'>,
+  ): Promise<string> {
     const raw = randomBytes(48).toString('hex');
     await this.prisma.refreshToken.create({
       data: {
-        userId,
+        userId: user.id,
         tokenHash: sha256(raw),
+        authVersion: user.authVersion,
         expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
       },
     });
@@ -116,11 +136,35 @@ export class TokensService {
     if (!record || record.revokedAt || record.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    await this.prisma.refreshToken.update({
-      where: { id: record.id },
-      data: { revokedAt: new Date() },
+    if (record.authVersion !== record.user.authVersion) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const refreshToken = randomBytes(48).toString('hex');
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.refreshToken.updateMany({
+        where: {
+          id: record.id,
+          revokedAt: null,
+          expiresAt: { gt: now },
+          authVersion: record.user.authVersion,
+        },
+        data: { revokedAt: now },
+      });
+      if (consumed.count !== 1) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+      await tx.refreshToken.create({
+        data: {
+          userId: record.userId,
+          tokenHash: sha256(refreshToken),
+          authVersion: record.user.authVersion,
+          expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+        },
+      });
     });
-    const refreshToken = await this.issueRefreshToken(record.userId);
+
     return {
       user: record.user,
       accessToken: this.signAccessToken(record.user),

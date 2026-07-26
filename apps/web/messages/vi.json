@@ -237,6 +237,17 @@
     "devView": "Xem chi tiết",
     "studioCardTitle": "Công cụ nhà phát triển",
     "studioCardBody": "Tạo game và quản lý các bản tải lên trong Studio.",
-    "studioCardCta": "Vào Studio"
+    "studioCardCta": "Vào Studio",
+    "securityTitle": "Bảo mật tài khoản",
+    "securityBody": "Sử dụng mật khẩu riêng biệt có ít nhất tám ký tự.",
+    "currentPassword": "Mật khẩu hiện tại",
+    "newPassword": "Mật khẩu mới",
+    "confirmPassword": "Xác nhận mật khẩu mới",
+    "changePassword": "Đổi mật khẩu",
+    "changingPassword": "Đang đổi mật khẩu…",
+    "passwordLogoutWarning": "Đổi mật khẩu sẽ đăng xuất tài khoản trên mọi thiết bị, kể cả thiết bị này.",
+    "passwordMismatch": "Mật khẩu mới không khớp.",
+    "passwordChanged": "Đã đổi mật khẩu. Hãy đăng nhập lại.",
+    "passwordFailed": "Không thể đổi mật khẩu. Vui lòng thử lại."
   }
 }

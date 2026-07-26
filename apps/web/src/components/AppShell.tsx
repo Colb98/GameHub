@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { Link, usePathname } from '@/i18n/routing';
+import { renewSessionIfStale } from '@/lib/client-api';
 import { Header } from './Header';
 import { MobileSearchOverlay } from './Search';
 
@@ -161,6 +162,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
   const immersive = /^\/games\/[^/]+\/play$/.test(pathname);
+
+  useEffect(() => {
+    const renewIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void renewSessionIfStale();
+      }
+    };
+    renewIfVisible();
+    document.addEventListener('visibilitychange', renewIfVisible);
+    window.addEventListener('focus', renewIfVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', renewIfVisible);
+      window.removeEventListener('focus', renewIfVisible);
+    };
+  }, []);
 
   if (immersive) {
     return (
