@@ -37,6 +37,7 @@ interface Sweep {
   samples: number;
   /** True when the sweep bailed out early; its sets are incomplete. */
   aborted: boolean;
+  fluxZones: Layout['fluxZones'];
 }
 
 /**
@@ -50,9 +51,17 @@ function simulateShot(
   angle: number,
   sweep: Sweep,
 ): { cleared: number; duration: number } {
-  const world = createWorld(clonePegs(pegs), params.bipolarCycle, params.bucketW, params.forceK);
+  const world = createWorld(
+    clonePegs(pegs),
+    params.bipolarCycle,
+    params.bucketW,
+    params.forceK,
+    sweep.fluxZones,
+    params.autoFluxInterval,
+    params.autoFluxStart,
+  );
   const hash = new PegHash(world.pegs);
-  launch(world, angle);
+  launch(world, angle, params.autoFluxInterval === null ? 0 : params.autoFluxStart);
 
   let pips = params.maxPips;
   let nextFlipAt = 0;
@@ -72,7 +81,12 @@ function simulateShot(
     }
     world.events.length = 0;
 
-    if (world.t * 1000 >= nextFlipAt && pips > 0) {
+    if (
+      params.autoFluxInterval === null &&
+      world.activeFluxZone < 0 &&
+      world.t * 1000 >= nextFlipAt &&
+      pips > 0
+    ) {
       const want = desiredCharge(world.pegs, world.t, params, world.ball.x, world.ball.y);
       if (want !== 0 && want !== world.ball.charge) {
         world.ball.charge = want;
@@ -121,6 +135,7 @@ function runSweep(layout: Layout, params: LevelParams): Sweep {
     medianDuration: 0,
     samples: SAMPLES,
     aborted: false,
+    fluxZones: layout.fluxZones,
   };
   const durations: number[] = [];
 

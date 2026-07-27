@@ -13,6 +13,12 @@ export interface LevelParams {
   maxPips: number;
   bucketW: number;
   bipolarCycle: number;
+  /** Number of polarity-overriding rectangular regions in the field. */
+  fluxZones: number;
+  /** Seconds between forced polarity changes; null keeps normal manual controls. */
+  autoFluxInterval: number | null;
+  /** Polarity used at launch on Auto Flux stages. */
+  autoFluxStart: -1 | 1;
   /** Magnet strength for this level; decays late so steering authority narrows. */
   forceK: number;
   archetypes: Archetype[];
@@ -32,6 +38,9 @@ function lerp(a: number, b: number, t: number): number {
 /** Difficulty curve from plan §6. Aggressive early, asymptotic late. */
 export function levelParams(level: number): LevelParams {
   const t = Math.min(1, (level - 1) / 18);
+  // Auto Flux is a recurring stage modifier, not a permanent difficulty upgrade.
+  const autoFluxStage = level >= 3 && (level - 3) % 4 === 0;
+  const autoFluxIndex = Math.max(0, Math.floor((level - 3) / 4));
   const archetypes: Archetype[] = ['lattice', 'arcs'];
   if (level >= 3) archetypes.push('funnel');
   if (level >= 5) archetypes.push('spiral');
@@ -52,6 +61,9 @@ export function levelParams(level: number): LevelParams {
     maxPips: level >= 19 ? 4 : level >= 9 ? 5 : level >= 4 ? 6 : level >= 2 ? 7 : 8,
     bucketW: Math.round(lerp(140, 90, Math.max(0, (level - 13) / 6))),
     bipolarCycle: lerp(1, 0.6, Math.max(0, (level - 13) / 6)),
+    fluxZones: level <= 1 ? 0 : level < 6 ? 1 : level < 13 ? 2 : 3,
+    autoFluxInterval: autoFluxStage ? lerp(3.2, 1.6, t) : null,
+    autoFluxStart: autoFluxIndex % 2 === 0 ? 1 : -1,
     // -2% per level past 10, floor at 70%.
     forceK: FORCE_K * Math.max(0.7, 1 - Math.max(0, level - 10) * 0.02),
     archetypes,

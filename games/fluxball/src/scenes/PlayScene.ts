@@ -105,10 +105,12 @@ export class PlayScene extends Phaser.Scene {
   private ballGlyph!: Phaser.GameObjects.Text;
   private aimGfx!: Phaser.GameObjects.Graphics;
   private bucketGfx!: Phaser.GameObjects.Graphics;
+  private fluxZoneGfx!: Phaser.GameObjects.Graphics;
   private hudGfx!: Phaser.GameObjects.Graphics;
   private scoreText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
   private ballsText!: Phaser.GameObjects.Text;
+  private fluxModeText!: Phaser.GameObjects.Text;
   private polarityButtons: PolarityButtonView[] = [];
   private cancelGfx!: Phaser.GameObjects.Graphics;
   private cancelLabel!: Phaser.GameObjects.Text;
@@ -197,6 +199,17 @@ export class PlayScene extends Phaser.Scene {
 
     this.aimGfx = this.add.graphics().setDepth(45);
     this.bucketGfx = this.add.graphics().setDepth(45);
+    this.fluxZoneGfx = this.add.graphics().setDepth(6);
+    this.fluxModeText = this.add
+      .text(W / 2, 61, '', {
+        fontFamily: MONO,
+        fontSize: '12px',
+        color: '#f7fbff',
+      })
+      .setOrigin(0.5, 1)
+      .setLetterSpacing(1)
+      .setDepth(100)
+      .setVisible(false);
   }
 
   private createBall() {
@@ -380,6 +393,7 @@ export class PlayScene extends Phaser.Scene {
     this.bonusTargets = 0;
     this.pips = this.params.maxPips;
     this.levelText.setText(`DEPTH ${String(level).padStart(2, '0')}`);
+    this.paintBall(this.world.ball.charge);
     this.updateHud();
   }
 
@@ -396,6 +410,9 @@ export class PlayScene extends Phaser.Scene {
       this.params.bipolarCycle,
       this.params.bucketW,
       this.params.forceK,
+      generated.fluxZones,
+      this.params.autoFluxInterval,
+      this.params.autoFluxStart,
     );
     this.hash = new PegHash(this.world.pegs);
 
@@ -455,7 +472,7 @@ export class PlayScene extends Phaser.Scene {
     this.state = 'aiming';
     this.setBallPosition(LAUNCH_X, LAUNCH_Y, true);
     this.ballVisual.setVisible(true);
-    this.paintBall(0);
+    this.paintBall(this.world.ball.charge);
     this.updateHud();
   }
 
@@ -484,6 +501,9 @@ export class PlayScene extends Phaser.Scene {
       this.params.bipolarCycle,
       this.params.bucketW,
       this.params.forceK,
+      this.world.fluxZones,
+      this.params.autoFluxInterval,
+      this.params.autoFluxStart,
     );
     const previewHash = new PegHash(pegs);
     launch(preview, this.aim, this.world.ball.charge);
@@ -506,7 +526,10 @@ export class PlayScene extends Phaser.Scene {
     if (this.state !== 'aiming') return;
     this.resetAimGesture();
     const launchCharge = this.world.ball.charge;
-    this.pips = this.params.maxPips - (launchCharge === 0 ? 0 : 1);
+    this.pips =
+      this.params.autoFluxInterval === null
+        ? this.params.maxPips - (launchCharge === 0 ? 0 : 1)
+        : this.params.maxPips;
     this.nextFlipAt = 0;
     this.field.clearTrail();
     launch(this.world, this.aim, launchCharge);
@@ -534,6 +557,8 @@ export class PlayScene extends Phaser.Scene {
     const isAiming = this.state === 'aiming' && !this.world.ball.active;
     const isFlying = this.state === 'flight' && this.world.ball.active;
     if (!isAiming && !isFlying) return;
+    if (this.params.autoFluxInterval !== null) return;
+    if (isFlying && this.world.activeFluxZone >= 0) return;
     if (next === this.world.ball.charge) return;
     if (isFlying && this.time.now < this.nextFlipAt) return;
     if (next !== 0 && this.pips <= 0) return;
@@ -543,36 +568,8 @@ export class PlayScene extends Phaser.Scene {
     if (isFlying) this.nextFlipAt = this.time.now + FLIP_COOLDOWN_MS;
     if (next === 0) this.synth.tone(300, 0.07, 0.025, -80, 'sine');
     else this.synth.flip(next);
-    this.paintBall(next);
     if (isAiming) this.rebuildAimPath();
-
-    // Discrete, physical: a white flash and an elastic scale pop.
-    this.tweens.killTweensOf(this.ballVisual);
-    this.ballCore.setTint(HEX.neutral);
-    this.ballGlow.setTint(HEX.neutral);
-    this.ballVisual.setScale(1.24);
-    this.tweens.add({
-      targets: this.ballVisual,
-      scaleX: 1,
-      scaleY: 1,
-      duration: 170,
-      ease: 'Back.easeOut',
-      onComplete: () => this.paintBall(this.world.ball.charge),
-    });
-
-    const selected = this.polarityButtons.find((button) => button.charge === next);
-    if (selected && !this.reducedMotion) {
-      this.tweens.killTweensOf([selected.bg, selected.label]);
-      selected.bg.setScale(1.08);
-      selected.label.setScale(1.12);
-      this.tweens.add({
-        targets: [selected.bg, selected.label],
-        scaleX: 1,
-        scaleY: 1,
-        duration: 170,
-        ease: 'Back.easeOut',
-      });
-    }
+    this.animateFluxChange(next, true);
     this.updateHud();
   }
 
@@ -590,10 +587,12 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.drawPegs(delta);
+    this.drawFluxZones();
     this.drawAim();
     this.drawBucket();
     this.field.draw(this.world, delta);
     this.paintPolarityButtons();
+    this.paintFluxMode();
     this.paintCancelZone();
   }
 
@@ -668,6 +667,24 @@ export class PlayScene extends Phaser.Scene {
         case 'orbit':
           this.popScore(event.x, event.y, 0, true, 'ORBIT x2');
           this.synth.tone(880, 0.18, 0.04, 220, 'triangle');
+          break;
+        case 'autoFlux':
+          if (event.charge !== undefined) {
+            this.synth.flip(event.charge);
+            this.animateFluxChange(event.charge, false);
+          }
+          break;
+        case 'fluxZone':
+          if (event.charge !== undefined) {
+            this.synth.tone(
+              event.charge > 0 ? 460 : 340,
+              0.07,
+              0.022,
+              event.charge > 0 ? 80 : -70,
+              'sine',
+            );
+            this.animateFluxChange(event.charge, false, 1.12);
+          }
           break;
         case 'bucket':
           this.ballsLeft += 1;
@@ -746,8 +763,9 @@ export class PlayScene extends Phaser.Scene {
     this.pips = this.params.maxPips;
     this.world.ball.x = LAUNCH_X;
     this.world.ball.y = LAUNCH_Y;
-    this.world.ball.charge = 0;
-    this.paintBall(0);
+    this.world.ball.charge =
+      this.params.autoFluxInterval === null ? 0 : this.params.autoFluxStart;
+    this.paintBall(this.world.ball.charge);
     this.setBallPosition(LAUNCH_X, LAUNCH_Y, true);
     this.ballVisual.setVisible(true);
     this.rebuildAimPath();
@@ -769,7 +787,7 @@ export class PlayScene extends Phaser.Scene {
       this.state = 'aiming';
       this.setBallPosition(LAUNCH_X, LAUNCH_Y, true);
       this.ballVisual.setVisible(true);
-      this.paintBall(0);
+      this.paintBall(this.world.ball.charge);
     });
   }
 
@@ -813,6 +831,42 @@ export class PlayScene extends Phaser.Scene {
         view.glow.setAlpha(0.25 + Math.abs(q) * 0.35);
       }
       if (view.ring) view.ring.rotation += (delta / 3000) * Math.PI * 2;
+    }
+  }
+
+  private drawFluxZones() {
+    this.fluxZoneGfx.clear();
+    if (!this.world) return;
+
+    for (let index = 0; index < this.world.fluxZones.length; index += 1) {
+      const zone = this.world.fluxZones[index]!;
+      const active = index === this.world.activeFluxZone;
+      const color = chargeHex(zone.charge);
+      const left = zone.x - zone.width / 2;
+      const top = zone.y - zone.height / 2;
+
+      // FluxZones are information, not obstacles: a thin wash stays behind the pegs.
+      this.fluxZoneGfx.fillStyle(color, active ? 0.075 : 0.028);
+      this.fluxZoneGfx.fillRoundedRect(left, top, zone.width, zone.height, 10);
+      this.fluxZoneGfx.lineStyle(active ? 1.6 : 1, color, active ? 0.42 : 0.16);
+      this.fluxZoneGfx.strokeRoundedRect(left, top, zone.width, zone.height, 10);
+
+      const glyphHalf = active ? 7 : 6;
+      this.fluxZoneGfx.lineStyle(2, color, active ? 0.62 : 0.26);
+      this.fluxZoneGfx.lineBetween(
+        zone.x - glyphHalf,
+        zone.y,
+        zone.x + glyphHalf,
+        zone.y,
+      );
+      if (zone.charge > 0) {
+        this.fluxZoneGfx.lineBetween(
+          zone.x,
+          zone.y - glyphHalf,
+          zone.x,
+          zone.y + glyphHalf,
+        );
+      }
     }
   }
 
@@ -890,17 +944,59 @@ export class PlayScene extends Phaser.Scene {
     this.ballGlyph.setText(charge > 0 ? '+' : charge < 0 ? '−' : '○');
   }
 
+  private animateFluxChange(
+    charge: Charge,
+    pulseButton: boolean,
+    peakScale = 1.24,
+  ) {
+    this.paintBall(charge);
+
+    // Discrete, physical: a white flash and an elastic scale pop.
+    this.tweens.killTweensOf(this.ballVisual);
+    this.ballCore.setTint(HEX.neutral);
+    this.ballGlow.setTint(HEX.neutral);
+    this.ballVisual.setScale(peakScale);
+    this.tweens.add({
+      targets: this.ballVisual,
+      scaleX: 1,
+      scaleY: 1,
+      duration: peakScale > 1.15 ? 170 : 120,
+      ease: 'Back.easeOut',
+      onComplete: () => this.paintBall(this.world.ball.charge),
+    });
+
+    if (!pulseButton || this.reducedMotion) return;
+    const selected = this.polarityButtons.find((button) => button.charge === charge);
+    if (!selected) return;
+    this.tweens.killTweensOf([selected.bg, selected.label]);
+    selected.bg.setScale(1.08);
+    selected.label.setScale(1.12);
+    this.tweens.add({
+      targets: [selected.bg, selected.label],
+      scaleX: 1,
+      scaleY: 1,
+      duration: 170,
+      ease: 'Back.easeOut',
+    });
+  }
+
   private paintPolarityButtons() {
     const isAiming = this.state === 'aiming';
     const inFlight = this.state === 'flight';
     const current = this.world?.ball.charge ?? 0;
     const ready = this.time.now >= this.nextFlipAt;
+    const manualAllowed = this.params?.autoFluxInterval === null;
+    const zoneLocked = inFlight && (this.world?.activeFluxZone ?? -1) >= 0;
 
     for (const button of this.polarityButtons) {
-      const selected = (isAiming || inFlight) && button.charge === current;
+      if (button.zone.input) button.zone.input.enabled = manualAllowed && !zoneLocked;
+      const selected =
+        manualAllowed && (isAiming || inFlight) && button.charge === current;
       const enabled =
-        isAiming ||
-        (inFlight && ready && (button.charge === 0 || this.pips > 0 || selected));
+        manualAllowed &&
+        !zoneLocked &&
+        (isAiming ||
+          (inFlight && ready && (button.charge === 0 || this.pips > 0 || selected)));
       const color = chargeHex(button.charge);
       const textColor =
         button.charge > 0 ? '#2cf6ff' : button.charge < 0 ? '#ff3dcc' : '#f7fbff';
@@ -933,6 +1029,37 @@ export class PlayScene extends Phaser.Scene {
       button.label.setColor(selected || enabled ? textColor : '#667093');
       button.label.setAlpha(selected ? 1 : enabled ? 0.82 : 0.5);
     }
+  }
+
+  private paintFluxMode() {
+    if (!this.world || !this.params) {
+      this.fluxModeText.setVisible(false);
+      return;
+    }
+
+    const activeZone = this.world.fluxZones[this.world.activeFluxZone];
+    if (activeZone) {
+      this.fluxModeText
+        .setText(`${activeZone.charge > 0 ? '+' : '−'} ZONE OVERRIDE`)
+        .setColor(activeZone.charge > 0 ? '#2cf6ff' : '#ff3dcc')
+        .setVisible(true);
+      return;
+    }
+
+    const interval = this.params.autoFluxInterval;
+    if (interval === null) {
+      this.fluxModeText.setVisible(false);
+      return;
+    }
+
+    const remaining =
+      this.state === 'flight'
+        ? Math.max(0, this.world.nextAutoFluxAt - this.world.t)
+        : interval;
+    this.fluxModeText
+      .setText(`AUTO FLUX LOCKED  ·  ${remaining.toFixed(1)}s`)
+      .setColor(this.world.ball.charge > 0 ? '#2cf6ff' : '#ff3dcc')
+      .setVisible(true);
   }
 
   private paintCancelZone() {
@@ -973,8 +1100,12 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private updateHud() {
+    const flux =
+      this.params?.autoFluxInterval === null
+        ? `FLUX ${this.pips}`
+        : `AUTO ${this.params?.autoFluxInterval.toFixed(1) ?? '—'}s`;
     this.scoreText.setText(
-      `SCORE ${this.score.toLocaleString('en-US')}  ·  FLUX ${this.pips}`,
+      `SCORE ${this.score.toLocaleString('en-US')}  ·  ${flux}`,
     );
     this.ballsText.setText(
       `${this.ballsLeft} SHOTS  ·  ${this.world?.targetsLeft ?? 0} TARGETS`,
@@ -1070,6 +1201,8 @@ export class PlayScene extends Phaser.Scene {
       'You can switch again during flight.',
       'Charged choices spend FLUX.',
       'Peg hits restore it.',
+      'Faint + / − zones override your polarity.',
+      'Some depths lock controls and switch automatically.',
       '',
       `Gain +1 shot: ${BONUS_SHOT_TARGETS} targets or ${BONUS_SHOT_NORMAL_PEGS} normal pegs.`,
       'Clear every ringed peg to descend.',
