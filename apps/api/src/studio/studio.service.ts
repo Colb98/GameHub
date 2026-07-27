@@ -258,6 +258,24 @@ export class StudioService {
     return { extension, buffer };
   }
 
+  private removeBannerVariants(bannerPath: string) {
+    const sourcePath = path.resolve(storageRoot(), bannerPath);
+    const extension = path.extname(sourcePath);
+    const prefix = `${path.basename(sourcePath, extension)}-w`;
+    const cacheDirectory = path.join(path.dirname(sourcePath), '.banner-cache');
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(cacheDirectory);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith(prefix) && entry.endsWith('.webp')) {
+        fs.rmSync(path.join(cacheDirectory, entry), { force: true });
+      }
+    }
+  }
+
   async uploadBanner(developerId: string, gameId: string, file: any) {
     const game = await this.ownedGame(developerId, gameId);
     this.assertEditable(game);
@@ -267,6 +285,7 @@ export class StudioService {
     if (game.bannerPath) {
       const oldPath = path.resolve(storageRoot(), game.bannerPath);
       if (oldPath.startsWith(path.resolve(storageRoot()) + path.sep)) {
+        this.removeBannerVariants(game.bannerPath);
         fs.rmSync(oldPath, { force: true });
       }
     }

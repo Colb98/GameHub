@@ -1,5 +1,10 @@
 import { Link } from '@/i18n/routing';
-import { coverGradient, gameMediaUrl, isNewGame } from '@/lib/cover';
+import {
+  coverGradient,
+  gameBannerSrcSet,
+  gameBannerUrl,
+  isNewGame,
+} from '@/lib/cover';
 import type { GameCard as GameCardType } from '@/lib/types';
 import { FavoriteButton } from './FavoriteButton';
 
@@ -8,11 +13,14 @@ import { FavoriteButton } from './FavoriteButton';
 export function GameCard({
   game,
   showMeta = true,
+  imageSizes = '(min-width: 1024px) 285px, calc(50vw - 18px)',
 }: {
   game: GameCardType;
   showMeta?: boolean;
+  imageSizes?: string;
 }) {
-  const bannerUrl = gameMediaUrl(game.bannerPath);
+  const bannerUrl = gameBannerUrl(game.bannerPath, 256);
+  const bannerSrcSet = gameBannerSrcSet(game.bannerPath, [256, 512, 768]);
 
   return (
     <Link
@@ -26,7 +34,10 @@ export function GameCard({
         {bannerUrl ? (
           <img
             src={bannerUrl}
+            srcSet={bannerSrcSet}
+            sizes={imageSizes}
             alt=""
+            loading="lazy"
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
