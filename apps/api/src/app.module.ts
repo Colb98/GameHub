@@ -10,6 +10,7 @@ import { PlayModule } from './play/play.module';
 import { SocialModule } from './social/social.module';
 import { StudioModule } from './studio/studio.module';
 import { AdminModule } from './admin/admin.module';
+import { BannerMediaModule } from './media/banner-media.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { AdminModule } from './admin/admin.module';
     SocialModule,
     StudioModule,
     AdminModule,
+    BannerMediaModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

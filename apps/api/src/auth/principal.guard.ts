@@ -1,5 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { FastifyRequest } from 'fastify';
+import { SKIP_PRINCIPAL_KEY } from '../common/decorators';
 import { TokensService } from './tokens.service';
 
 /**
@@ -9,10 +11,22 @@ import { TokensService } from './tokens.service';
  */
 @Injectable()
 export class PrincipalGuard implements CanActivate {
-  constructor(private readonly tokens: TokensService) {}
+  constructor(
+    private readonly tokens: TokensService,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<FastifyRequest>();
+    const skipPrincipal = this.reflector.getAllAndOverride<boolean>(
+      SKIP_PRINCIPAL_KEY,
+      [ctx.getHandler(), ctx.getClass()],
+    );
+    if (skipPrincipal) {
+      req.principal = {};
+      return true;
+    }
+
     const header = req.headers.authorization;
     const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
     const cookie = (req.cookies as Record<string, string> | undefined)?.[

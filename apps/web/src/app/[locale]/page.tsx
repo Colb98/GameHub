@@ -1,7 +1,11 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
 import { apiGet } from '@/lib/server-api';
-import { coverGradient, gameMediaUrl } from '@/lib/cover';
+import {
+  coverGradient,
+  gameBannerSrcSet,
+  gameBannerUrl,
+} from '@/lib/cover';
 import type { CategoryCount, GameCard as GameCardType } from '@/lib/types';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { FavoritesRail } from '@/components/FavoritesRail';
@@ -21,7 +25,8 @@ function Hero({
   detailsLabel: string;
   featuredLabel: string;
 }) {
-  const bannerUrl = gameMediaUrl(game.bannerPath);
+  const bannerUrl = gameBannerUrl(game.bannerPath, 512);
+  const bannerSrcSet = gameBannerSrcSet(game.bannerPath, [512, 1280]);
 
   return (
     <section
@@ -31,7 +36,10 @@ function Hero({
       {bannerUrl && (
         <img
           src={bannerUrl}
+          srcSet={bannerSrcSet}
+          sizes="(min-width: 1024px) 1150px, calc(100vw - 24px)"
           alt=""
+          fetchPriority="high"
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}

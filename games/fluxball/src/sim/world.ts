@@ -15,17 +15,21 @@ import {
 import { hitPeg, hitWalls } from './collide';
 import { magneticAccel } from './forces';
 import { PegHash } from './hash';
-import type { Ball, Charge, Peg, World } from './types';
+import type { Ball, Charge, FluxZone, Peg, World } from './types';
 
 export function createWorld(
   pegs: Peg[],
   bipolarCycle: number,
   bucketW: number,
   forceK: number,
+  fluxZones: FluxZone[] = [],
+  autoFluxInterval: number | null = null,
+  autoFluxStart: -1 | 1 = 1,
 ): World {
   return {
     pegs,
-    ball: makeBall(),
+    fluxZones,
+    ball: makeBall(autoFluxInterval === null ? 0 : autoFluxStart),
     t: 0,
     bipolarCycle,
     forceK,
@@ -34,6 +38,10 @@ export function createWorld(
     bucketW,
     events: [],
     influences: [],
+    autoFluxInterval,
+    autoFluxStart,
+    nextAutoFluxAt: autoFluxInterval ?? Infinity,
+    activeFluxZone: -1,
     magnetDead: false,
     targetsLeft: pegs.filter((peg) => peg.target).length,
     orbitAngle: 0,
@@ -43,14 +51,13 @@ export function createWorld(
   };
 }
 
-function makeBall(): Ball {
+function makeBall(charge: Charge): Ball {
   return {
     x: LAUNCH_X,
     y: LAUNCH_Y,
     vx: 0,
     vy: 0,
-    // The launcher rests neutral until the player selects a starting polarity.
-    charge: 0,
+    charge,
     radius: BALL_RADIUS,
     active: false,
   };
@@ -66,6 +73,8 @@ export function launch(world: World, angle: number, charge: Charge = 0): void {
   ball.charge = charge;
   ball.active = true;
   world.t = 0;
+  world.nextAutoFluxAt = world.autoFluxInterval ?? Infinity;
+  world.activeFluxZone = -1;
   world.magnetDead = false;
   world.orbitAngle = 0;
   world.orbitPeg = -1;
@@ -91,6 +100,8 @@ export function step(world: World, dt: number, hash: PegHash): void {
   }
 
   world.t += dt;
+  applyFluxZone(world);
+  stepAutoFlux(world);
   if (!world.magnetDead && world.t > SHOT_MAGNET_TIMEOUT_S) {
     world.magnetDead = true;
     world.events.push({ type: 'timeout', x: ball.x, y: ball.y });
@@ -106,6 +117,7 @@ export function step(world: World, dt: number, hash: PegHash): void {
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
 
+  applyFluxZone(world);
   trackOrbit(world);
 
   let touched = false;
@@ -144,6 +156,63 @@ export function step(world: World, dt: number, hash: PegHash): void {
   }
 
   stepBucket(world, dt);
+}
+
+function stepAutoFlux(world: World): void {
+  const interval = world.autoFluxInterval;
+  if (interval === null) return;
+
+  while (world.t >= world.nextAutoFluxAt) {
+    // The timer keeps advancing inside a zone, but the zone owns polarity until exit.
+    if (world.activeFluxZone < 0) {
+      const charge: -1 | 1 =
+        world.ball.charge === 1
+          ? -1
+          : world.ball.charge === -1
+            ? 1
+            : world.autoFluxStart;
+      world.ball.charge = charge;
+      world.events.push({
+        type: 'autoFlux',
+        x: world.ball.x,
+        y: world.ball.y,
+        charge,
+      });
+    }
+    world.nextAutoFluxAt += interval;
+  }
+}
+
+function applyFluxZone(world: World): void {
+  const index = findFluxZone(world.ball, world.fluxZones);
+  if (index < 0) {
+    world.activeFluxZone = -1;
+    return;
+  }
+
+  const zone = world.fluxZones[index]!;
+  const entered = index !== world.activeFluxZone;
+  world.activeFluxZone = index;
+  world.ball.charge = zone.charge;
+  if (entered) {
+    world.events.push({
+      type: 'fluxZone',
+      x: world.ball.x,
+      y: world.ball.y,
+      zoneIndex: index,
+      charge: zone.charge,
+    });
+  }
+}
+
+function findFluxZone(ball: Ball, zones: readonly FluxZone[]): number {
+  for (let index = 0; index < zones.length; index += 1) {
+    const zone = zones[index]!;
+    const dx = Math.max(Math.abs(ball.x - zone.x) - zone.width / 2, 0);
+    const dy = Math.max(Math.abs(ball.y - zone.y) - zone.height / 2, 0);
+    if (dx * dx + dy * dy <= ball.radius * ball.radius) return index;
+  }
+  return -1;
 }
 
 function stepBucket(world: World, dt: number): void {

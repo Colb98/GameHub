@@ -45,6 +45,15 @@ the whole run; one `gameOver` at the end reports the total.
   read "I have no steering authority right now" from the ball alone, without checking the
   HUD. The ball also launches neutral, so the first moments of a shot are pure ballistics.
 
+#### Stage polarity modifiers
+
+- **Auto Flux:** recurring stages lock the manual polarity controls, launch with a charge,
+  and alternate the ball between positive and negative on a stage-configured interval.
+  The interval tightens at deeper levels and is shown in the HUD with a live countdown.
+- **FluxZones:** from level 2 onward, faint rectangular positive or negative regions are
+  placed in the field. While the ball overlaps a zone, that zone owns its polarity without
+  spending flux. The override is continuously enforced and takes priority over Auto Flux.
+
 ### 2.2 Force model
 
 For each peg within `R = 120 px` of the ball:

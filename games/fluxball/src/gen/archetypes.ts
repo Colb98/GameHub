@@ -8,7 +8,7 @@ import {
   LAUNCH_Y,
   PEG_RADIUS,
 } from '../sim/constants';
-import type { Peg, PegKind } from '../sim/types';
+import type { FluxZone, Peg, PegKind } from '../sim/types';
 import type { Archetype, LevelParams } from './curve';
 import type { Rng } from './rng';
 
@@ -316,8 +316,37 @@ function placeAnchors(pegs: Peg[], count: number, rng: Rng): void {
   }
 }
 
+function placeFluxZones(count: number, rng: Rng): FluxZone[] {
+  const zones: FluxZone[] = [];
+  const firstCharge: -1 | 1 = rng.chance(0.5) ? 1 : -1;
+  let attempts = 0;
+
+  while (zones.length < count && attempts < count * 80) {
+    attempts += 1;
+    const width = Math.round(rng.range(112, 164));
+    const height = Math.round(rng.range(48, 68));
+    const zone: FluxZone = {
+      x: Math.round(rng.range(AREA_LEFT + width / 2, AREA_RIGHT - width / 2)),
+      y: Math.round(rng.range(AREA_TOP + height / 2, AREA_BOTTOM - height / 2)),
+      width,
+      height,
+      charge: zones.length % 2 === 0 ? firstCharge : firstCharge === 1 ? -1 : 1,
+    };
+
+    const overlaps = zones.some(
+      (other) =>
+        Math.abs(zone.x - other.x) < (zone.width + other.width) / 2 + 36 &&
+        Math.abs(zone.y - other.y) < (zone.height + other.height) / 2 + 42,
+    );
+    if (!overlaps) zones.push(zone);
+  }
+
+  return zones;
+}
+
 export interface Layout {
   pegs: Peg[];
+  fluxZones: FluxZone[];
   archetype: Archetype;
 }
 
@@ -344,5 +373,5 @@ export function buildLayout(params: LevelParams, rng: Rng): Layout {
   assignCharges(pegs, params, rng);
   assignTargets(pegs, params.targets, params.targetBias, rng);
   placeAnchors(pegs, params.anchors, rng);
-  return { pegs, archetype };
+  return { pegs, fluxZones: placeFluxZones(params.fluxZones, rng), archetype };
 }

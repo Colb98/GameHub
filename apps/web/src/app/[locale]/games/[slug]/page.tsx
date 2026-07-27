@@ -1,7 +1,12 @@
 import { notFound } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { apiGet } from '@/lib/server-api';
-import { coverGradient, gameMediaUrl } from '@/lib/cover';
+import {
+  coverGradient,
+  gameBannerSrcSet,
+  gameBannerUrl,
+  gameMediaUrl,
+} from '@/lib/cover';
 import type { GameCard as GameCardType, GameDetail } from '@/lib/types';
 import { GameCard } from '@/components/GameCard';
 import { DetailActions, RatingStars } from '@/components/GameActions';
@@ -24,7 +29,8 @@ export default async function GamePage({
     apiGet<GameCardType[]>(`/games/${slug}/suggestions?locale=${locale}`),
   ]);
   if (!game) notFound();
-  const bannerUrl = gameMediaUrl(game.bannerPath);
+  const bannerUrl = gameBannerUrl(game.bannerPath, 512);
+  const bannerSrcSet = gameBannerSrcSet(game.bannerPath, [512, 768]);
 
   return (
     <div className="flex flex-col gap-6 lg:gap-7">
@@ -35,7 +41,13 @@ export default async function GamePage({
           style={bannerUrl ? undefined : { background: coverGradient(game.slug) }}
         >
           {bannerUrl ? (
-            <img src={bannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <img
+              src={bannerUrl}
+              srcSet={bannerSrcSet}
+              sizes="(min-width: 1024px) 380px, calc(100vw - 24px)"
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : (
             <span className="px-6 text-center font-display text-2xl font-bold text-black/45 dark:text-white/70">
               {game.name}

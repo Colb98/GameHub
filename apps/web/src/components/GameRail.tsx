@@ -25,7 +25,11 @@ export function GameRail({
         <div className="rail-scroll flex gap-2.5 overflow-x-auto pb-1 lg:grid lg:grid-cols-6 lg:gap-3.5 lg:overflow-visible lg:pb-0">
           {games.map((g) => (
             <div key={g.id} className="w-[110px] shrink-0 lg:w-auto">
-              <GameCard game={g} showMeta={showMeta} />
+              <GameCard
+                game={g}
+                showMeta={showMeta}
+                imageSizes="(min-width: 1024px) 185px, 110px"
+              />
             </div>
           ))}
         </div>

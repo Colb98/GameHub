@@ -4,7 +4,11 @@ import { use, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { api, isUnauthenticatedError } from '@/lib/client-api';
-import { gameMediaUrl } from '@/lib/cover';
+import {
+  gameBannerSrcSet,
+  gameBannerUrl,
+  gameMediaUrl,
+} from '@/lib/cover';
 import type { StudioGame } from '@/lib/types';
 
 type FormState = {
@@ -142,7 +146,8 @@ export default function EditGamePage({
 
   if (!game || !form) return <p className="text-sm text-muted">{error ?? t('loading')}</p>;
 
-  const bannerUrl = gameMediaUrl(game.bannerPath);
+  const bannerUrl = gameBannerUrl(game.bannerPath, 768);
+  const bannerSrcSet = gameBannerSrcSet(game.bannerPath, [768, 1280]);
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -173,7 +178,7 @@ export default function EditGamePage({
 
       <section className="space-y-4 border-t-[1.5px] border-line pt-6">
         <div><h2 className="text-lg font-display font-bold text-ink">{t('mediaTitle')}</h2><p className="text-sm text-body">{t('mediaBody')}</p></div>
-        {bannerUrl && <img src={bannerUrl} alt="" className="aspect-[2.4/1] w-full rounded-xl object-cover" />}
+        {bannerUrl && <img src={bannerUrl} srcSet={bannerSrcSet} sizes="768px" alt="" className="aspect-[2.4/1] w-full rounded-xl object-cover" />}
         <label className="block space-y-1 text-sm"><span>{t('banner')}</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setBannerFile(event.target.files?.[0] ?? null)} className="text-sm text-muted file:mr-3 file:rounded file:border-0 file:bg-chip file:px-3 file:py-1.5 file:text-sm file:text-ink" /></label>
         <label className="block space-y-1 text-sm"><span>{t('screenshots')}</span><input type="file" multiple accept="image/png,image/jpeg,image/webp" onChange={(event) => setScreenshotFiles(Array.from(event.target.files ?? []))} className="text-sm text-muted file:mr-3 file:rounded file:border-0 file:bg-chip file:px-3 file:py-1.5 file:text-sm file:text-ink" /></label>
         <button type="button" className="btn-ghost" disabled={mediaBusy || (!bannerFile && screenshotFiles.length === 0)} onClick={uploadMedia}>{mediaBusy ? t('uploadingMedia') : t('uploadMedia')}</button>

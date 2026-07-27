@@ -7,6 +7,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
+    "test:banner": "node --import tsx --test src/media/banner-media.service.spec.ts",
     "seed": "tsx prisma/seed.ts",
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy"
@@ -34,7 +35,8 @@
     "fastify": "^5.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "sanitize-html": "^2.13.1"
+    "sanitize-html": "^2.13.1",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
